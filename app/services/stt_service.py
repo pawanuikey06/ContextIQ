@@ -47,7 +47,8 @@ class AudioTranscriptionService:
         if self._diarize_model is None:
             logger.info("Loading diarization pipeline...")
             self._diarize_model = DiarizationPipeline(
-                use_auth_token=self.hf_token,
+                model_name="pyannote/speaker-diarization-3.1",
+                token=self.hf_token,
                 device=self.device
             )
             logger.info("Diarization pipeline loaded")

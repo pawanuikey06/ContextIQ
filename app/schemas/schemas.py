@@ -45,3 +45,11 @@ class MeetingResponse(BaseModel):
     audio_path: str
     segments: List[SegmentOut]
     speakers: Dict[str, List[SpeakerSegment]]
+
+
+class SummaryResponse(BaseModel):
+    """Response from POST /summarize/{meeting_id}."""
+    meeting_id: str
+    speaker_summaries_en: Dict[str, str]
+    overall_summary_en: str
+    overall_summary_hi: str

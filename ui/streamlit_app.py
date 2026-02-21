@@ -1,9 +1,10 @@
 """
 Streamlit UI for Meeting Intelligence System.
-Calls FastAPI backend: upload → transcribe → display results.
+Calls FastAPI backend: upload → transcribe → display results → summarize.
 """
 import streamlit as st
 import requests
+import json
 
 st.set_page_config(page_title="Meeting Intelligence", layout="wide")
 
@@ -14,6 +15,7 @@ API_BASE = "http://localhost:8000"
 UPLOAD_URL = f"{API_BASE}/upload-video"
 TRANSCRIBE_URL = f"{API_BASE}/transcribe"
 MEETING_URL = f"{API_BASE}/meeting"
+SUMMARIZE_URL = f"{API_BASE}/summarize"
 
 # --------------------
 # Header
@@ -106,7 +108,9 @@ if "transcript_data" in st.session_state:
     st.divider()
     st.markdown(f"### 📋 Meeting: `{meeting_id}`")
 
-    tab1, tab2, tab3 = st.tabs(["💬 Chat View", "🗣️ Speaker View", "🕒 Timestamp View"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "💬 Chat View", "🗣️ Speaker View", "🕒 Timestamp View", "📝 Summaries"
+    ])
 
     # ─── TAB 1: Chat-style transcript ───
     with tab1:
@@ -142,9 +146,74 @@ if "transcript_data" in st.session_state:
         df.columns = ["Start (s)", "End (s)", "Speaker", "Text"]
         st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # ─── Download button ───
+    # ─── TAB 4: Summaries ───
+    with tab4:
+        st.markdown("#### 📝 Meeting Summaries")
+        st.caption("Generate AI-powered summaries of the meeting in English and Hindi.")
+
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            generate_btn = st.button("🔄 Generate Summary", type="primary")
+        with col2:
+            force_regen = st.checkbox("Force regenerate", value=False,
+                                       help="Check to regenerate even if a cached summary exists")
+
+        # Generate summary on button click
+        if generate_btn:
+            with st.spinner("🧠 Generating summaries with AI... This may take a minute."):
+                try:
+                    params = {"force": "true"} if force_regen else {}
+                    res = requests.post(
+                        f"{SUMMARIZE_URL}/{meeting_id}",
+                        params=params,
+                        timeout=120,
+                    )
+                    if res.status_code != 200:
+                        st.error(f"❌ Summary failed: {res.text}")
+                    else:
+                        st.session_state["summary_data"] = res.json()
+                        st.success("✅ Summaries generated!")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Cannot connect to backend. Is FastAPI running?")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+
+        # Display summaries if available
+        if "summary_data" in st.session_state:
+            summary = st.session_state["summary_data"]
+
+            st.divider()
+
+            # Speaker-wise summaries
+            st.markdown("##### 🗣️ Speaker-wise Summaries (English)")
+            speaker_sums = summary.get("speaker_summaries_en", {})
+            for speaker, text in speaker_sums.items():
+                with st.expander(f"🗣️ {speaker}", expanded=True):
+                    st.markdown(text)
+
+            st.divider()
+
+            # Overall English summary
+            st.markdown("##### 🌐 Overall Summary (English)")
+            st.info(summary.get("overall_summary_en", "N/A"))
+
+            st.divider()
+
+            # Overall Hindi summary
+            st.markdown("##### 🇮🇳 Overall Summary (Hindi)")
+            st.success(summary.get("overall_summary_hi", "N/A"))
+
+            # Download summary JSON
+            st.divider()
+            st.download_button(
+                label="📥 Download Summary JSON",
+                data=json.dumps(summary, indent=2, ensure_ascii=False),
+                file_name=f"summary_{meeting_id}.json",
+                mime="application/json",
+            )
+
+    # ─── Download transcript button ───
     st.divider()
-    import json
     st.download_button(
         label="📥 Download Transcript JSON",
         data=json.dumps(data, indent=2, ensure_ascii=False),

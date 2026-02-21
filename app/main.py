@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.api.upload import router as upload_router
 from app.api.transcribe import router as transcribe_router
 from app.api.diarization import router as diarization_router
+from app.api.summarize import router as summarize_router
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +22,7 @@ app = FastAPI(title="Meeting Intelligence System", version="1.0.0")
 app.include_router(upload_router, tags=["Upload"])
 app.include_router(transcribe_router, tags=["Transcription"])
 app.include_router(diarization_router, tags=["Meeting"])
+app.include_router(summarize_router, tags=["Summary"])
 
 
 @app.get("/")
@@ -30,6 +32,7 @@ async def root():
         "endpoints": [
             "POST /upload-video",
             "POST /transcribe/{meeting_id}",
-            "GET /meeting/{meeting_id}"
+            "GET /meeting/{meeting_id}",
+            "POST /summarize/{meeting_id}",
         ]
     }

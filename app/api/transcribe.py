@@ -16,10 +16,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Initialize services ONCE (models loaded once for speed)
-stt_service = AudioTranscriptionService()
-speaker_builder = SpeakerTranscriptBuilder()
-storage_service = MeetingStorageService()
+# Services initialized lazily to avoid import-time model loading
+_stt_service = None
+_speaker_builder = None
+_storage_service = None
+
+
+def _get_services():
+    """Lazy-init services on first request."""
+    global _stt_service, _speaker_builder, _storage_service
+    if _stt_service is None:
+        _stt_service = AudioTranscriptionService()
+    if _speaker_builder is None:
+        _speaker_builder = SpeakerTranscriptBuilder()
+    if _storage_service is None:
+        _storage_service = MeetingStorageService()
+    return _stt_service, _speaker_builder, _storage_service
 
 AUDIO_DIR = Path("data/audio")
 
@@ -41,6 +53,8 @@ async def transcribe_meeting(meeting_id: str):
     logger.info(f"[{meeting_id}] Starting transcription: {audio_path}")
 
     try:
+        stt_service, speaker_builder, storage_service = _get_services()
+
         # Step 1: Transcribe + diarize (WhisperX)
         result = stt_service.transcribe(str(audio_path))
         segments = result["segments"]

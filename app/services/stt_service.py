@@ -1,11 +1,10 @@
 """
 Speech-to-Text service using WhisperX.
 Handles transcription + speaker diarization in one pass.
-Models are loaded ONCE at init for speed.
+Models are loaded lazily on first use to avoid startup failures.
 """
 import os
 import logging
-import whisperx
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,30 +15,42 @@ class AudioTranscriptionService:
     """
     WhisperX transcription with speaker diarization.
     - CPU optimized (int8)
-    - Models loaded once at startup
+    - Models loaded lazily on first transcribe() call
     """
 
     def __init__(self, device="cpu", compute_type="int8"):
         self.device = device
         self.compute_type = compute_type
+        self._asr_model = None
+        self._diarize_model = None
 
         self.hf_token = os.getenv("HF_TOKEN")
         if not self.hf_token:
             raise ValueError("HF_TOKEN not found in environment. Set it in .env")
 
-        logger.info("Loading WhisperX ASR model (base)...")
-        self.asr_model = whisperx.load_model(
-            "base",
-            device=self.device,
-            compute_type=self.compute_type
-        )
+        logger.info("AudioTranscriptionService initialized (models will load on first use)")
 
-        logger.info("Loading diarization pipeline...")
-        self.diarize_model = whisperx.DiarizationPipeline(
-            use_auth_token=self.hf_token,
-            device=self.device
-        )
-        logger.info("Models loaded successfully")
+    def _load_models(self):
+        """Lazy-load WhisperX and diarization models on first use."""
+        import whisperx
+        from whisperx.diarize import DiarizationPipeline
+
+        if self._asr_model is None:
+            logger.info("Loading WhisperX ASR model (base)...")
+            self._asr_model = whisperx.load_model(
+                "base",
+                device=self.device,
+                compute_type=self.compute_type
+            )
+            logger.info("ASR model loaded")
+
+        if self._diarize_model is None:
+            logger.info("Loading diarization pipeline...")
+            self._diarize_model = DiarizationPipeline(
+                use_auth_token=self.hf_token,
+                device=self.device
+            )
+            logger.info("Diarization pipeline loaded")
 
     def transcribe(self, audio_path: str) -> dict:
         """
@@ -52,17 +63,22 @@ class AudioTranscriptionService:
             dict with keys: "language", "segments"
             Each segment: { "start", "end", "speaker", "text" }
         """
+        import whisperx
+
+        # Ensure models are loaded
+        self._load_models()
+
         logger.info(f"Loading audio: {audio_path}")
         audio = whisperx.load_audio(audio_path)
 
         # 1. Transcribe
         logger.info("Running transcription...")
-        result = self.asr_model.transcribe(audio)
+        result = self._asr_model.transcribe(audio)
         logger.info(f"Transcription done: {len(result.get('segments', []))} raw segments")
 
-        # 2. Diarization — needs the audio FILE PATH, not numpy array
+        # 2. Diarization — pass the audio FILE PATH
         logger.info("Running speaker diarization...")
-        diarization = self.diarize_model(audio_path)
+        diarization = self._diarize_model(audio_path)
 
         # 3. Assign speaker labels to segments
         result = whisperx.assign_word_speakers(diarization, result)

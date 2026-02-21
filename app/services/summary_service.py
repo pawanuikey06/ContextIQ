@@ -111,21 +111,33 @@ class MeetingSummaryService:
         return "\n".join(lines)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
-        """Make a single chat completion call to OpenRouter."""
-        try:
-            response = self.client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.3,
-                max_tokens=2048,
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            logger.error("LLM call failed: %s", e)
-            raise RuntimeError(f"LLM call failed: {e}")
+        """Make a chat completion call to OpenRouter with retries."""
+        last_error = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                logger.info("LLM call attempt %d/%d", attempt, MAX_RETRIES)
+                response = self.client.chat.completions.create(
+                    model=MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=2048,
+                )
+                content = response.choices[0].message.content
+                if content:
+                    return content.strip()
+                raise ValueError("Empty response from LLM")
+            except Exception as e:
+                last_error = e
+                logger.warning("LLM attempt %d failed: %s", attempt, str(e)[:200])
+                if attempt < MAX_RETRIES:
+                    wait = 2 ** attempt  # 2s, 4s, 8s
+                    logger.info("Retrying in %ds...", wait)
+                    time.sleep(wait)
+
+        raise RuntimeError(f"LLM call failed after {MAX_RETRIES} attempts: {last_error}")
 
     def _generate_speaker_summaries(self, speakers: dict) -> dict:
         """Generate a summary for each speaker's contributions."""

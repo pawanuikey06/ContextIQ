@@ -14,13 +14,23 @@ logger = logging.getLogger(__name__)
 class AudioTranscriptionService:
     """
     WhisperX transcription with speaker diarization.
-    - CPU optimized (int8)
+    - Auto-detects CUDA GPU (uses float16) or falls back to CPU (int8)
     - Models loaded lazily on first transcribe() call
     """
 
-    def __init__(self, device="cpu", compute_type="int8"):
-        self.device = device
-        self.compute_type = compute_type
+    def __init__(self, device=None, compute_type=None):
+        import torch
+
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+
+        if compute_type is None:
+            self.compute_type = "float16" if self.device == "cuda" else "int8"
+        else:
+            self.compute_type = compute_type
+
         self._asr_model = None
         self._diarize_model = None
 
@@ -28,7 +38,7 @@ class AudioTranscriptionService:
         if not self.hf_token:
             raise ValueError("HF_TOKEN not found in environment. Set it in .env")
 
-        logger.info("AudioTranscriptionService initialized (models will load on first use)")
+        logger.info(f"AudioTranscriptionService initialized: device={self.device}, compute_type={self.compute_type}")
 
     def _load_models(self):
         """Lazy-load WhisperX and diarization models on first use."""
@@ -46,12 +56,36 @@ class AudioTranscriptionService:
 
         if self._diarize_model is None:
             logger.info("Loading diarization pipeline...")
-            self._diarize_model = DiarizationPipeline(
-                model_name="pyannote/speaker-diarization-3.1",
-                token=self.hf_token,
-                device=self.device
-            )
-            logger.info("Diarization pipeline loaded")
+            # Try models in order of preference
+            models_to_try = [
+                "pyannote/speaker-diarization-3.1",
+                "pyannote/speaker-diarization",
+                "pyannote/speaker-diarization-community-1",
+            ]
+            last_error = None
+            for model_name in models_to_try:
+                try:
+                    logger.info(f"Trying diarization model: {model_name}")
+                    self._diarize_model = DiarizationPipeline(
+                        model_name=model_name,
+                        token=self.hf_token,
+                        device=self.device
+                    )
+                    logger.info(f"Diarization pipeline loaded: {model_name}")
+                    break
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Failed to load {model_name}: {e}")
+                    continue
+
+            if self._diarize_model is None:
+                raise RuntimeError(
+                    f"Could not load any diarization model. Last error: {last_error}\n"
+                    "Please accept model licenses at:\n"
+                    "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+                    "  https://huggingface.co/pyannote/segmentation-3.0\n"
+                    "  https://huggingface.co/pyannote/speaker-diarization-community-1"
+                )
 
     def transcribe(self, audio_path: str) -> dict:
         """

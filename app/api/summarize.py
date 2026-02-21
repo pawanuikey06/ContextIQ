@@ -12,16 +12,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_summary_service = None
-
-
-def _get_service() -> MeetingSummaryService:
-    """Lazy-init the summary service."""
-    global _summary_service
-    if _summary_service is None:
-        _summary_service = MeetingSummaryService()
-    return _summary_service
-
 
 @router.post("/summarize/{meeting_id}", response_model=SummaryResponse)
 async def summarize_meeting(
@@ -35,7 +25,7 @@ async def summarize_meeting(
     logger.info("[%s] Summary requested (force=%s)", meeting_id, force)
 
     try:
-        service = _get_service()
+        service = MeetingSummaryService()
         result = service.summarize(meeting_id, force=force)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -46,3 +36,4 @@ async def summarize_meeting(
         raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
 
     return SummaryResponse(**result)
+

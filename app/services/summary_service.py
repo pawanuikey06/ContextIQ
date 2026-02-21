@@ -15,7 +15,6 @@ from openai import OpenAI
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# GPT-4o-mini: fast, cheap (~$0.15/1M input tokens), great multilingual
 MODEL = "gpt-4o-mini"
 STORAGE_DIR = Path("storage")
 
@@ -35,20 +34,9 @@ class MeetingSummaryService:
     # Public API
     # ------------------------------------------------------------------
     def summarize(self, meeting_id: str, force: bool = False) -> dict:
-        """
-        Generate (or return cached) summaries for a meeting.
-
-        Args:
-            meeting_id: UUID of the meeting
-            force: regenerate even if summary.json exists
-
-        Returns:
-            dict with meeting_id, speaker_summaries_en,
-            overall_summary_en, overall_summary_hi
-        """
         summary_path = STORAGE_DIR / meeting_id / "summary.json"
 
-        # Return cached summary unless forced
+        # Return cached unless forced
         if not force and summary_path.exists():
             logger.info("[%s] Returning cached summary", meeting_id)
             with open(summary_path, "r", encoding="utf-8") as f:
@@ -70,10 +58,9 @@ class MeetingSummaryService:
         if not segments:
             raise ValueError(f"No segments found in transcript for meeting {meeting_id}")
 
-        # Build the full conversation text for context
         full_text = self._build_conversation_text(segments)
 
-        # Generate summaries
+        # Generate all summaries
         logger.info("[%s] Generating speaker-wise summaries...", meeting_id)
         speaker_summaries = self._generate_speaker_summaries(speakers)
 
@@ -101,7 +88,6 @@ class MeetingSummaryService:
     # Private helpers
     # ------------------------------------------------------------------
     def _build_conversation_text(self, segments: list) -> str:
-        """Build a readable conversation string from segments."""
         lines = []
         for seg in segments:
             speaker = seg.get("speaker", "UNKNOWN")
@@ -111,38 +97,27 @@ class MeetingSummaryService:
         return "\n".join(lines)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
-        """Make a chat completion call to OpenRouter with retries."""
-        last_error = None
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                logger.info("LLM call attempt %d/%d", attempt, MAX_RETRIES)
-                response = self.client.chat.completions.create(
-                    model=MODEL,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.3,
-                    max_tokens=2048,
-                )
-                content = response.choices[0].message.content
-                if content:
-                    return content.strip()
-                raise ValueError("Empty response from LLM")
-            except Exception as e:
-                last_error = e
-                logger.warning("LLM attempt %d failed: %s", attempt, str(e)[:200])
-                if attempt < MAX_RETRIES:
-                    wait = 2 ** attempt  # 2s, 4s, 8s
-                    logger.info("Retrying in %ds...", wait)
-                    time.sleep(wait)
-
-        raise RuntimeError(f"LLM call failed after {MAX_RETRIES} attempts: {last_error}")
+        """Make a chat completion call to OpenAI."""
+        try:
+            response = self.client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,
+                max_tokens=2048,
+            )
+            content = response.choices[0].message.content
+            if content:
+                return content.strip()
+            raise ValueError("Empty response from LLM")
+        except Exception as e:
+            logger.error("LLM call failed: %s", e)
+            raise RuntimeError(f"LLM call failed: {e}")
 
     def _generate_speaker_summaries(self, speakers: dict) -> dict:
-        """Generate a summary for each speaker's contributions."""
         summaries = {}
-
         for speaker, segments in speakers.items():
             combined_text = " ".join(
                 seg.get("text", "").strip() for seg in segments if seg.get("text", "").strip()
@@ -158,13 +133,10 @@ class MeetingSummaryService:
                 "Be concise (3-5 sentences). Output ONLY the summary text, nothing else."
             )
             user_prompt = f"Speaker: {speaker}\n\nTheir statements:\n{combined_text}"
-
             summaries[speaker] = self._call_llm(system_prompt, user_prompt)
-
         return summaries
 
     def _generate_overall_summary_en(self, full_text: str) -> str:
-        """Generate an overall meeting summary in English."""
         system_prompt = (
             "You are an expert meeting analyst. "
             "Provide a concise overall meeting summary in English. Include:\n"
@@ -174,11 +146,9 @@ class MeetingSummaryService:
             "- Action items\n"
             "Output ONLY the summary text in plain text, no JSON."
         )
-        user_prompt = f"Meeting transcript:\n\n{full_text}"
-        return self._call_llm(system_prompt, user_prompt)
+        return self._call_llm(system_prompt, f"Meeting transcript:\n\n{full_text}")
 
     def _generate_overall_summary_hi(self, full_text: str) -> str:
-        """Generate an overall meeting summary in Hindi."""
         system_prompt = (
             "You are an expert meeting analyst. "
             "Provide a concise overall meeting summary in HINDI (हिंदी). Rules:\n"
@@ -188,5 +158,4 @@ class MeetingSummaryService:
             "- Include: high-level summary, key points, decisions, action items\n"
             "- Output ONLY the Hindi summary text, no English, no JSON."
         )
-        user_prompt = f"Meeting transcript:\n\n{full_text}"
-        return self._call_llm(system_prompt, user_prompt)
+        return self._call_llm(system_prompt, f"Meeting transcript:\n\n{full_text}")

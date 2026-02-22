@@ -1,10 +1,12 @@
 """
 ContextIQ — Meeting Intelligence Platform
 Premium Streamlit UI with branded design, separated workflows, and polished aesthetics.
+Multipage: Meeting Processing + Meeting Chat
 """
 import streamlit as st
 import requests
 import json
+import uuid
 import pandas as pd
 
 # ─────────────────────────────────────────
@@ -14,7 +16,7 @@ st.set_page_config(
     page_title="ContextIQ — Meeting Intelligence",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────
@@ -25,6 +27,21 @@ UPLOAD_URL = f"{API_BASE}/upload-video"
 TRANSCRIBE_URL = f"{API_BASE}/transcribe"
 MEETING_URL = f"{API_BASE}/meeting"
 SUMMARIZE_URL = f"{API_BASE}/summarize"
+CHAT_URL = f"{API_BASE}/chat"
+
+# ─────────────────────────────────────────
+# Sidebar Navigation
+# ─────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""<p style='font-size:1.5rem;font-weight:700;
+        background:linear-gradient(135deg,#818cf8,#c084fc);
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+        margin-bottom:0.5rem;'>🧠 ContextIQ</p>""", unsafe_allow_html=True)
+    page = st.radio(
+        "Module",
+        ["📋 Meeting Processing", "💬 Meeting Chat"],
+        label_visibility="collapsed",
+    )
 
 # ─────────────────────────────────────────
 # Custom CSS — Premium Dark Theme
@@ -302,6 +319,209 @@ st.markdown("""
     header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
+# ═══════════════════════════════════════════════════
+# PAGE 2: Meeting Chat (if selected, run and stop)
+# ═══════════════════════════════════════════════════
+if page == "💬 Meeting Chat":
+
+    st.markdown("""
+    <div class="hero-container">
+        <p class="brand-name">💬 Meeting Chat</p>
+        <p class="brand-tagline">Ask questions about your meetings — powered by LangChain + ChromaDB + Gemini</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Initialize chat session ──
+    if "chat_session_id" not in st.session_state:
+        st.session_state["chat_session_id"] = str(uuid.uuid4())
+    if "chat_messages" not in st.session_state:
+        st.session_state["chat_messages"] = []
+
+    # ── Sidebar: Indexed Meetings ──
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("**📂 Knowledge Base**")
+
+        # Fetch indexed meetings
+        try:
+            idx_res = requests.get(f"{CHAT_URL}/meetings", timeout=5)
+            if idx_res.status_code == 200:
+                indexed = idx_res.json().get("indexed_meetings", [])
+            else:
+                indexed = []
+        except Exception:
+            indexed = []
+
+        if indexed:
+            st.caption(f"{len(indexed)} meeting(s) indexed")
+            selected_meetings = []
+            for mid in indexed:
+                if st.checkbox(f"📄 {mid[:8]}...", value=True, key=f"chat_m_{mid}"):
+                    selected_meetings.append(mid)
+        else:
+            st.caption("No meetings indexed yet.")
+            st.info("Process a meeting first, or index existing ones below.")
+            selected_meetings = None
+
+        # Index All button
+        st.markdown("---")
+        if st.button("� Index All Meetings", use_container_width=True):
+            from pathlib import Path
+            storage = Path("storage")
+            count = 0
+            for meeting_dir in storage.iterdir():
+                if meeting_dir.is_dir() and (meeting_dir / "transcript.json").exists():
+                    mid_name = meeting_dir.name
+                    try:
+                        requests.post(f"{CHAT_URL}/index/{mid_name}", timeout=30)
+                        count += 1
+                    except Exception:
+                        pass
+            st.success(f"✅ Indexed {count} meetings")
+            st.rerun()
+
+        # New Chat button
+        if st.button("🗑️ New Chat", use_container_width=True):
+            st.session_state["chat_messages"] = []
+            st.session_state["chat_session_id"] = str(uuid.uuid4())
+            try:
+                requests.post(
+                    f"{CHAT_URL}/clear/{st.session_state['chat_session_id']}",
+                    timeout=5,
+                )
+            except Exception:
+                pass
+            st.rerun()
+
+    # ── Quick Prompts ──
+    if not st.session_state["chat_messages"]:
+        st.markdown("""
+        <div class="section-header">
+            <span class="section-icon">💡</span>
+            <p class="section-title">Quick Prompts — Click to get started</p>
+            <div class="section-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        prompts = [
+            "📋 Summarize the last meeting",
+            "📌 What action items were discussed?",
+            "👤 What did each speaker talk about?",
+            "🔍 What were the main disagreements?",
+        ]
+        prompt_cols = st.columns(len(prompts))
+        for i, p in enumerate(prompts):
+            with prompt_cols[i]:
+                if st.button(p, use_container_width=True, key=f"qp_{i}"):
+                    st.session_state["chat_messages"].append(
+                        {"role": "user", "content": p}
+                    )
+                    st.rerun()
+
+    # ── Chat History ──
+    for msg in st.session_state["chat_messages"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg.get("citations"):
+                with st.expander(f"📎 Sources ({len(msg['citations'])})", expanded=False):
+                    for c in msg["citations"]:
+                        mins = int(c['start'] // 60)
+                        secs = int(c['start'] % 60)
+                        st.markdown(
+                            f"**{c['speaker']}** • `{mins}:{secs:02d}` • "
+                            f"Meeting `{c['meeting_id'][:8]}...`\n\n"
+                            f"> {c['excerpt']}"
+                        )
+
+    # ── Chat Input ──
+    user_input = st.chat_input("Ask about your meetings...")
+
+    if user_input:
+        st.session_state["chat_messages"].append(
+            {"role": "user", "content": user_input}
+        )
+        st.rerun()
+
+    # If last message is from user, get AI response
+    if (
+        st.session_state["chat_messages"]
+        and st.session_state["chat_messages"][-1]["role"] == "user"
+    ):
+        question = st.session_state["chat_messages"][-1]["content"]
+
+        with st.chat_message("assistant"):
+            with st.spinner("🔍 Searching meetings..."):
+                try:
+                    payload = {
+                        "question": question,
+                        "session_id": st.session_state["chat_session_id"],
+                    }
+                    if selected_meetings:
+                        payload["meeting_ids"] = selected_meetings
+
+                    res = requests.post(
+                        f"{CHAT_URL}/ask",
+                        json=payload,
+                        timeout=60,
+                    )
+
+                    if res.status_code == 200:
+                        chat_data = res.json()
+                        answer = chat_data.get("answer", "Sorry, I couldn't find an answer.")
+                        citations = chat_data.get("citations", [])
+
+                        st.markdown(answer)
+                        if citations:
+                            with st.expander(f"📎 Sources ({len(citations)})", expanded=False):
+                                for c in citations:
+                                    mins = int(c['start'] // 60)
+                                    secs = int(c['start'] % 60)
+                                    st.markdown(
+                                        f"**{c['speaker']}** • `{mins}:{secs:02d}` • "
+                                        f"Meeting `{c['meeting_id'][:8]}...`\n\n"
+                                        f"> {c['excerpt']}"
+                                    )
+
+                        st.session_state["chat_messages"].append({
+                            "role": "assistant",
+                            "content": answer,
+                            "citations": citations,
+                        })
+                    else:
+                        error_msg = f"❌ Error: {res.text}"
+                        st.error(error_msg)
+                        st.session_state["chat_messages"].append({
+                            "role": "assistant",
+                            "content": error_msg,
+                        })
+                except requests.exceptions.ConnectionError:
+                    err_msg = "❌ Cannot connect to backend. Make sure FastAPI is running."
+                    st.error(err_msg)
+                    st.session_state["chat_messages"].append(
+                        {"role": "assistant", "content": err_msg}
+                    )
+                except Exception as e:
+                    err_msg = f"❌ Error: {e}"
+                    st.error(err_msg)
+                    st.session_state["chat_messages"].append(
+                        {"role": "assistant", "content": err_msg}
+                    )
+
+    # Footer for chat page
+    st.markdown("""
+    <div class="footer">
+        Built with ❤️ by <strong>ContextIQ</strong> • AI-Powered Meeting Intelligence Platform
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
+# ═══════════════════════════════════════════════════
+# PAGE 1: Meeting Processing (default, falls through)
+# ═══════════════════════════════════════════════════
+
+# ─────────────────────────────────────────
+# Hero Banner
+# ─────────────────────────────────────────
 
 # ─────────────────────────────────────────
 # Hero Banner

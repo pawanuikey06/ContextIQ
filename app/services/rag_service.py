@@ -57,7 +57,7 @@ class MeetingRAGService:
         Load a meeting transcript, chunk by speaker segment, and
         upsert into ChromaDB. Returns the number of chunks indexed.
         """
-        from langchain.schema import Document
+        from langchain_core.documents import Document
 
         transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
         if not transcript_path.exists():
@@ -150,8 +150,7 @@ class MeetingRAGService:
             Each citation: {meeting_id, speaker, start, end, excerpt}
         """
         from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain.chains import ConversationalRetrievalChain
-        from langchain.memory import ConversationBufferWindowMemory
+        from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
         # Build retriever (with optional meeting filter)
         search_kwargs = {"k": 10}
@@ -165,41 +164,72 @@ class MeetingRAGService:
             search_kwargs=search_kwargs,
         )
 
-        # LLM
+        # Retrieve relevant documents
+        docs = retriever.invoke(question)
+
+        # Build context from retrieved documents
+        context_parts = []
+        for doc in docs:
+            meta = doc.metadata
+            speaker = meta.get("speaker", "UNKNOWN")
+            start = meta.get("start", 0.0)
+            mid = meta.get("meeting_id", "unknown")[:8]
+            context_parts.append(
+                f"[Meeting {mid}, {speaker}, {start:.1f}s]: {doc.page_content}"
+            )
+        context = "\n".join(context_parts)
+
+        # Build chat history from memory
+        history = self._memories.get(session_id, [])
+        history_text = ""
+        if history:
+            hist_lines = []
+            for msg in history[-10:]:  # Last 5 exchanges
+                hist_lines.append(f"{msg['role'].upper()}: {msg['content']}")
+            history_text = "\n".join(hist_lines)
+
+        # System prompt
+        system_prompt = """You are ContextIQ, an intelligent meeting assistant. You answer questions ONLY using the meeting transcript excerpts provided below.
+
+RULES:
+1. Answer ONLY from the provided context. Never make up information.
+2. If the answer is not in the context, say: "I don't have that information in the meetings I've indexed."
+3. Always cite the speaker name and approximate timestamp for each fact.
+4. Be concise but thorough.
+5. Use the speaker's mapped name (not SPEAKER_XX IDs)."""
+
+        # Build messages
+        messages = [SystemMessage(content=system_prompt)]
+
+        if history_text:
+            messages.append(HumanMessage(
+                content=f"Previous conversation:\n{history_text}"
+            ))
+
+        user_content = f"MEETING EXCERPTS:\n{context}\n\nQUESTION: {question}"
+        messages.append(HumanMessage(content=user_content))
+
+        # Call LLM
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
             google_api_key=self._api_key,
             temperature=0.3,
         )
+        response = llm.invoke(messages)
+        answer = response.content
 
-        # Get or create memory for this session
+        # Update conversation memory
         if session_id not in self._memories:
-            self._memories[session_id] = ConversationBufferWindowMemory(
-                k=5,
-                memory_key="chat_history",
-                return_messages=True,
-                output_key="answer",
-            )
-        memory = self._memories[session_id]
-
-        # Build chain
-        chain = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=retriever,
-            memory=memory,
-            return_source_documents=True,
-            combine_docs_chain_kwargs={
-                "prompt": self._build_prompt(),
-            },
-        )
-
-        # Run
-        result = chain.invoke({"question": question})
+            self._memories[session_id] = []
+        self._memories[session_id].append({"role": "user", "content": question})
+        self._memories[session_id].append({"role": "assistant", "content": answer})
+        # Keep only last 10 messages
+        self._memories[session_id] = self._memories[session_id][-10:]
 
         # Extract citations from source documents
         citations = []
         seen = set()
-        for doc in result.get("source_documents", []):
+        for doc in docs:
             meta = doc.metadata
             key = (meta.get("meeting_id"), meta.get("start"))
             if key in seen:
@@ -214,34 +244,9 @@ class MeetingRAGService:
             })
 
         return {
-            "answer": result.get("answer", ""),
+            "answer": answer,
             "citations": citations[:5],  # Top 5 sources
         }
-
-    def _build_prompt(self):
-        """Build the restrictive system prompt for Q&A."""
-        from langchain.prompts import PromptTemplate
-
-        template = """You are ContextIQ, an intelligent meeting assistant. You answer questions ONLY using the meeting transcript excerpts provided below.
-
-RULES:
-1. Answer ONLY from the provided context. Never make up information.
-2. If the answer is not in the context, say: "I don't have that information in the meetings I've indexed."
-3. Always cite the speaker name and approximate timestamp for each fact.
-4. Be concise but thorough.
-5. Use the speaker's mapped name (not SPEAKER_XX IDs).
-
-MEETING EXCERPTS:
-{context}
-
-QUESTION: {question}
-
-ANSWER (with citations):"""
-
-        return PromptTemplate(
-            template=template,
-            input_variables=["context", "question"],
-        )
 
     # ------------------------------------------------------------------
     # Utilities
@@ -263,7 +268,7 @@ ANSWER (with citations):"""
     def clear_chat_history(self, session_id: str = "default"):
         """Clear conversation memory for a session."""
         if session_id in self._memories:
-            self._memories[session_id].clear()
+            del self._memories[session_id]
             logger.info("Cleared chat history for session: %s", session_id)
 
     def get_meeting_chunk_count(self, meeting_id: str) -> int:

@@ -20,20 +20,6 @@ ContextIQ is an end-to-end **Meeting Intelligence Platform** that transforms raw
 
 All of this is delivered through a premium Streamlit web interface with 5 interactive tabs.
 
-### Key Differentiators
-
-| Capability | ContextIQ | Competitors (Otter, Fireflies, Gong) |
-|---|---|---|
-| **Privacy-first (local STT)** | ✅ On-device GPU | ❌ Cloud-only |
-| **Hindi summaries** | ✅ | ❌ |
-| **HITL summary approval** | ✅ | ❌ Auto-publish |
-| **Structured action items** | ✅ With priority/deadline | Basic lists |
-| **Follow-up email draft** | ✅ AI-generated | ❌ |
-| **SSE streaming chat** | ✅ Real-time | ❌ |
-| **RAG with speaker citations** | ✅ | ❌ or basic |
-| **Self-hosted / free** | ✅ Open-source | $20–$100+/mo |
-
----
 
 ## 2. Problem Statement
 

@@ -1,8 +1,9 @@
 """
 Pydantic v2 schemas for the Meeting Intelligence pipeline.
-Defines request/response models for upload, transcription, and meeting retrieval.
+Defines request/response models for upload, transcription, meeting retrieval,
+segment editing, meeting metadata, and chat.
 """
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 
@@ -53,3 +54,36 @@ class SummaryResponse(BaseModel):
     speaker_summaries_en: Dict[str, str]
     overall_summary_en: str
     overall_summary_hi: str
+
+
+# ── Segment Editing ──
+
+class SegmentEditRequest(BaseModel):
+    """Request to edit a transcript segment."""
+    text: Optional[str] = None
+    speaker: Optional[str] = None
+
+
+# ── Meeting Metadata ──
+
+class MeetingMetadataRequest(BaseModel):
+    """Request to update meeting metadata."""
+    title: Optional[str] = None
+    date: Optional[str] = None
+    participants: Optional[List[str]] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class MeetingMetadataResponse(BaseModel):
+    """Response from GET /meeting/{id}/metadata."""
+    meeting_id: str
+    title: Optional[str] = None
+    date: Optional[str] = None
+    participants: Optional[List[str]] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
+    processed_date: Optional[str] = None
+    processed_day: Optional[str] = None
+    processed_time: Optional[str] = None
+

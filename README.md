@@ -11,8 +11,8 @@
 | 🎬 **Ingestion** | Video Upload | Accepts `.mp4`, `.mkv`, `.mov` — extracts 16 kHz mono WAV via FFmpeg |
 | 🗣️ **Transcription** | WhisperX STT + Speaker Diarization | Fast CTranslate2 engine + pyannote.audio 3.1 speaker labels |
 | ⚡ **Performance** | GPU Accelerated | Auto-detects NVIDIA CUDA GPUs (3–5× faster than CPU) |
-| 🤖 **AI Summaries** | Bilingual Summarization | Speaker-wise + overall summaries in English & Hindi (Zephyr 7B via HuggingFace) |
-| 💬 **AI Chat** | RAG-powered Q&A | Ask questions about meetings — LangChain + ChromaDB + Gemini with source citations |
+| 🤖 **AI Summaries** | Bilingual Summarization | Speaker-wise + overall summaries in English & Hindi (Llama 3.3 70B via Groq) |
+| 💬 **AI Chat** | RAG-powered Q&A | Ask questions about meetings — LangChain + ChromaDB + Llama 3.3 70B with source citations |
 | 👤 **HITL** | Speaker Name Mapping | Map `SPEAKER_00` → real names; persists across all views |
 | ✅ **HITL** | Summary Approval | Review, edit, and approve AI summaries before publishing |
 | 📄 **Publishing** | One-Click Publish | Professional PDF (Unicode Hindi support) + Email (SMTP) + Microsoft Teams webhook |
@@ -41,8 +41,8 @@ ContextIQ/
 │   │   └── chat.py                   # POST /chat/ask, POST /chat/index/{id}, GET /chat/meetings
 │   ├── services/
 │   │   ├── stt_service.py            # WhisperX transcription + pyannote diarization
-│   │   ├── rag_service.py            # LangChain + ChromaDB + Gemini RAG chatbot
-│   │   ├── summary_service.py        # HuggingFace Zephyr 7B summarization (EN + HI)
+│   │   ├── rag_service.py            # LangChain + ChromaDB + Groq RAG chatbot
+│   │   ├── summary_service.py        # Groq Llama 3.3 70B summarization (EN + HI)
 │   │   ├── publish_service.py        # PDF generation (fpdf2) + Email (SMTP) + Teams webhook
 │   │   ├── speaker_service.py        # Speaker-wise segment grouping
 │   │   ├── storage_service.py        # JSON persistence to disk
@@ -73,8 +73,8 @@ flowchart LR
     A["📹 Upload Video"] --> B["🎵 Extract Audio<br/>(FFmpeg)"]
     B --> C["🗣️ Transcribe + Diarize<br/>(WhisperX + pyannote)"]
     C --> D["💾 Save Transcript<br/>(JSON)"]
-    D --> E["🤖 AI Summary<br/>(Zephyr 7B)"]
-    D --> F["💬 RAG Chat<br/>(ChromaDB + Gemini)"]
+    D --> E["🤖 AI Summary<br/>(Groq Llama 3.3 70B)"]
+    D --> F["💬 RAG Chat<br/>(ChromaDB + Groq)"]
     D --> G["🖥️ Interactive Views<br/>(Streamlit UI)"]
     E --> H["✅ Human Review<br/>(HITL)"]
     H --> I["📄 Publish<br/>(PDF + Email + Teams)"]
@@ -87,8 +87,8 @@ flowchart LR
 3. **Transcribe + Diarize** → WhisperX performs STT; pyannote identifies speakers (GPU-accelerated)
 4. **Save Transcript** → Speaker-labeled segments saved to `storage/{meeting_id}/transcript.json`
 5. **Three parallel paths:**
-   - **AI Summarization** → Zephyr 7B generates bilingual summaries → user reviews/edits (HITL) → publish as PDF/Email/Teams
-   - **RAG Chatbot** → Transcript indexed into ChromaDB → ask questions with cited answers (Gemini)
+   - **AI Summarization** → Llama 3.3 70B (via Groq) generates bilingual summaries → user reviews/edits (HITL) → publish as PDF/Email/Teams
+   - **RAG Chatbot** → Transcript indexed into ChromaDB → ask questions with cited answers (Llama 3.3 70B via Groq)
    - **Interactive Views** → Chat View, Speaker View, Timeline Table via Streamlit
 
 ---
@@ -112,7 +112,8 @@ Includes: **SegmentOut**, **SpeakerSegment**, **TranscriptResponse**, **MeetingR
 | **Python 3.10+** | Runtime |
 | **FFmpeg** | Video → audio extraction |
 | **NVIDIA GPU + CUDA** *(optional)* | 3–5× faster transcription |
-| **HuggingFace account** | Access pyannote diarization models + Zephyr 7B inference |
+| **HuggingFace account** | Access pyannote diarization models |
+| **Groq API key** | LLM inference for summaries + RAG chat ([get free key](https://console.groq.com/keys)) |
 
 > **Diarization model access:** Accept the licenses at:
 > - https://huggingface.co/pyannote/speaker-diarization-3.1
@@ -148,8 +149,7 @@ Create a `.env` file in the project root:
 ```env
 FFMPEG_PATH=C:/path/to/ffmpeg.exe
 HF_TOKEN=hf_your_huggingface_token
-OPENROUTER_API_KEY=sk-or-v1-your-key
-OPENROUTER_MODEL=google/gemini-2.0-flash-001
+GROQ_API_KEY=gsk_your_groq_api_key
 
 # Optional — for email publishing
 SMTP_HOST=smtp.gmail.com
@@ -165,8 +165,7 @@ TEAMS_WEBHOOK_URL=https://your-org.webhook.office.com/...
 |----------|----------|-------------|
 | `FFMPEG_PATH` | ✅ | Absolute path to `ffmpeg.exe` binary |
 | `HF_TOKEN` | ✅ | HuggingFace access token ([create here](https://huggingface.co/settings/tokens)) |
-| `OPENROUTER_API_KEY` | ✅ | OpenRouter API key for Gemini (RAG chatbot) |
-| `OPENROUTER_MODEL` | ⬜ | LLM model ID (default: `google/gemini-2.0-flash-001`) |
+| `GROQ_API_KEY` | ✅ | Groq API key for LLM inference ([get free key](https://console.groq.com/keys)) |
 | `SMTP_HOST/PORT/USER/PASSWORD` | ⬜ | SMTP settings for email publishing |
 | `TEAMS_WEBHOOK_URL` | ⬜ | Microsoft Teams Incoming Webhook URL |
 
@@ -341,15 +340,16 @@ pip install --force-reinstall torch torchaudio --index-url https://download.pyto
 | **Frontend** | Streamlit (premium dark theme) |
 | **Transcription** | WhisperX (CTranslate2) |
 | **Diarization** | pyannote.audio 3.1 |
-| **Summarization** | HuggingFace Zephyr 7B (free Inference API) |
-| **RAG / Chat** | LangChain + ChromaDB + Gemini (via OpenRouter) |
-| **Embeddings** | HuggingFace `all-MiniLM-L6-v2` |
+| **Summarization** | Llama 3.3 70B via Groq (⚡ ~500 tok/sec) |
+| **RAG / Chat** | LangChain + ChromaDB + Llama 3.3 70B via Groq |
+| **Embeddings** | HuggingFace `all-MiniLM-L6-v2` (local, CPU) |
 | **PDF Generation** | fpdf2 (Unicode Hindi support) |
 | **Email** | SMTP (smtplib) |
 | **Teams** | Microsoft Incoming Webhook |
 | **Audio Extraction** | FFmpeg |
 | **Validation** | Pydantic v2 |
 | **ML Framework** | PyTorch (CUDA 12.8) |
+| **LLM Provider** | Groq (custom LPU hardware) |
 
 ---
 

@@ -35,15 +35,23 @@ app.include_router(chat_router, tags=["Chat"])
 async def root():
     return {
         "service": "Meeting Intelligence System",
+        "version": "2.0.0",
         "endpoints": [
             "POST /upload-video",
             "POST /transcribe/{meeting_id}",
-            "GET /meeting/{meeting_id}",
+            "GET  /meeting/{meeting_id}",
+            "PUT  /meeting/{meeting_id}/segments/{index}",
+            "GET  /meeting/{meeting_id}/metadata",
+            "PATCH /meeting/{meeting_id}/metadata",
             "POST /summarize/{meeting_id}",
             "POST /publish/{meeting_id}",
-            "GET /publish/{meeting_id}/pdf",
+            "GET  /publish/{meeting_id}/pdf",
             "POST /chat/ask",
+            "POST /chat/ask/stream",
             "POST /chat/index/{meeting_id}",
-            "GET /chat/meetings",
+            "GET  /chat/meetings",
+            "POST /chat/clear/{session_id}",
+            "POST /meeting/{meeting_id}/speaker-map",
+            "GET  /meeting/{meeting_id}/speaker-map",
         ]
     }

@@ -1,7 +1,7 @@
 """
 RAG Service — Meeting Knowledge Base.
-Uses LangChain + ChromaDB + Gemini for retrieval-augmented Q&A
-over meeting transcripts.
+Uses LangChain + ChromaDB + Groq (Llama 3.3 70B) for retrieval-augmented
+Q&A over meeting transcripts.
 """
 import os
 import json
@@ -20,16 +20,16 @@ CHROMA_DIR = STORAGE_DIR / "chroma_db"
 class MeetingRAGService:
     """
     Ingest meeting transcripts into ChromaDB and answer questions
-    using LangChain ConversationalRetrievalChain + Gemini.
+    using LangChain + Groq (Llama 3.3 70B).
     """
 
     def __init__(self):
         from langchain_huggingface import HuggingFaceEmbeddings
         from langchain_chroma import Chroma
 
-        self._api_key = os.getenv("OPENROUTER_API_KEY")
+        self._api_key = os.getenv("GROQ_API_KEY")
         if not self._api_key:
-            raise ValueError("OPENROUTER_API_KEY not found in .env")
+            raise ValueError("GROQ_API_KEY not found in .env")
 
         # Embedding model (small, fast, runs on CPU)
         logger.info("Loading embedding model...")
@@ -236,11 +236,11 @@ RULES:
         user_content = f"MEETING EXCERPTS:\n{context}\n\nQUESTION: {question}"
         messages.append(HumanMessage(content=user_content))
 
-        # Call LLM via OpenRouter
+        # Call LLM via Groq
         llm = ChatOpenAI(
-            model="google/gemini-2.0-flash-001",
+            model="llama-3.3-70b-versatile",
             openai_api_key=self._api_key,
-            openai_api_base="https://openrouter.ai/api/v1",
+            openai_api_base="https://api.groq.com/openai/v1",
             temperature=0.3,
         )
         response = llm.invoke(messages)
@@ -307,3 +307,129 @@ RULES:
             return len(result.get("ids", []))
         except Exception:
             return 0
+
+    # ------------------------------------------------------------------
+    # Streaming Query
+    # ------------------------------------------------------------------
+    def query_stream(
+        self,
+        question: str,
+        session_id: str = "default",
+        meeting_ids: list = None,
+    ):
+        """
+        Stream answer tokens for a question using meeting transcripts.
+        Yields (type, data) tuples:
+          ("token", "word...")  — streamed answer tokens
+          ("citations", [...]) — source citations at the end
+          ("done", "")         — signals completion
+        """
+        from langchain_openai import ChatOpenAI
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        # Build retriever
+        search_kwargs = {"k": 10}
+        if meeting_ids:
+            search_kwargs["filter"] = {"meeting_id": {"$in": meeting_ids}}
+
+        retriever = self._vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs=search_kwargs,
+        )
+
+        # Retrieve relevant documents
+        docs = retriever.invoke(question)
+
+        # Build context
+        context = "\n".join(doc.page_content for doc in docs)
+
+        # Build meeting calendar
+        calendar_lines = []
+        try:
+            for mid in self.list_indexed_meetings():
+                meta_path = STORAGE_DIR / mid / "metadata.json"
+                if meta_path.exists():
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        mm = json.load(f)
+                    calendar_lines.append(
+                        f"- Meeting {mid[:8]}: {mm.get('processed_date', 'Unknown')}, "
+                        f"{mm.get('processed_day', 'Unknown')}, "
+                        f"{mm.get('processed_time', '')}"
+                    )
+        except Exception:
+            pass
+        meeting_calendar = "\n".join(calendar_lines) if calendar_lines else "No meetings indexed."
+
+        # Chat history
+        history = self._memories.get(session_id, [])
+        history_text = ""
+        if history:
+            hist_lines = [f"{msg['role'].upper()}: {msg['content']}" for msg in history[-10:]]
+            history_text = "\n".join(hist_lines)
+
+        # System prompt
+        system_prompt = f"""You are ContextIQ, an intelligent meeting assistant. You answer questions ONLY using the meeting transcript excerpts provided below.
+
+INDEXED MEETINGS:
+{meeting_calendar}
+
+RULES:
+1. Answer ONLY from the provided context. Never make up information.
+2. If the answer is not in the context, say: "I don't have that information in the meetings I've indexed."
+3. Give clean, natural answers. Do NOT include timestamps, speaker names in parentheses, or source references in your response. The UI shows sources separately.
+4. Be concise but thorough.
+5. When asked about dates or days (e.g. "what did we discuss on Monday"), use the INDEXED MEETINGS list above to identify which meetings match, then answer from their content.
+6. The date shown in brackets at the start of each excerpt tells you when that meeting happened."""
+
+        # Build messages
+        messages = [SystemMessage(content=system_prompt)]
+        if history_text:
+            messages.append(HumanMessage(content=f"Previous conversation:\n{history_text}"))
+        messages.append(HumanMessage(content=f"MEETING EXCERPTS:\n{context}\n\nQUESTION: {question}"))
+
+        # Call LLM via Groq with streaming
+        llm = ChatOpenAI(
+            model="llama-3.3-70b-versatile",
+            openai_api_key=self._api_key,
+            openai_api_base="https://api.groq.com/openai/v1",
+            temperature=0.3,
+            streaming=True,
+        )
+
+        # Stream tokens
+        full_answer = []
+        for chunk in llm.stream(messages):
+            token = chunk.content
+            if token:
+                full_answer.append(token)
+                yield ("token", token)
+
+        answer = "".join(full_answer)
+
+        # Update memory
+        if session_id not in self._memories:
+            self._memories[session_id] = []
+        self._memories[session_id].append({"role": "user", "content": question})
+        self._memories[session_id].append({"role": "assistant", "content": answer})
+        self._memories[session_id] = self._memories[session_id][-10:]
+
+        # Extract citations
+        citations = []
+        seen = set()
+        for doc in docs:
+            meta = doc.metadata
+            key = (meta.get("meeting_id"), meta.get("start"))
+            if key in seen:
+                continue
+            seen.add(key)
+            citations.append({
+                "meeting_id": meta.get("meeting_id", ""),
+                "speaker": meta.get("speaker", "UNKNOWN"),
+                "start": meta.get("start", 0.0),
+                "end": meta.get("end", 0.0),
+                "excerpt": doc.page_content[:200],
+            })
+
+        yield ("citations", citations[:5])
+        yield ("done", "")
+

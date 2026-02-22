@@ -1,6 +1,6 @@
 """
 Meeting Summary Service.
-Uses Hugging Face free Inference API (Zephyr 7B) to generate:
+Uses Groq API (Llama 3.3 70B) for fast, high-quality generation of:
 - Speaker-wise summaries (English)
 - Overall meeting summary (English)
 - Overall meeting summary (Hindi)
@@ -11,26 +11,26 @@ import time
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
+from groq import Groq
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-MODEL = "HuggingFaceH4/zephyr-7b-beta"
+MODEL = "llama-3.3-70b-versatile"
 STORAGE_DIR = Path("storage")
 MAX_RETRIES = 3
 
 
 class MeetingSummaryService:
-    """Generates meeting summaries using HuggingFace Inference API."""
+    """Generates meeting summaries using Groq API (Llama 3.3 70B)."""
 
     def __init__(self):
-        token = os.getenv("HF_TOKEN")
-        if not token:
-            raise ValueError("HF_TOKEN not found in .env")
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY not found in .env")
 
-        self.client = InferenceClient(token=token)
-        logger.info("MeetingSummaryService initialized (model=%s)", MODEL)
+        self.client = Groq(api_key=api_key)
+        logger.info("MeetingSummaryService initialized (model=%s, provider=Groq)", MODEL)
 
     # ------------------------------------------------------------------
     # Public API
@@ -127,7 +127,7 @@ class MeetingSummaryService:
         return "\n".join(lines)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
-        """Call HuggingFace Inference API with retry logic."""
+        """Call Groq API with retry logic."""
         last_error = None
         messages = [
             {"role": "system", "content": system_prompt},
@@ -136,8 +136,8 @@ class MeetingSummaryService:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                logger.info("HF call attempt %d/%d", attempt, MAX_RETRIES)
-                response = self.client.chat_completion(
+                logger.info("Groq call attempt %d/%d (model=%s)", attempt, MAX_RETRIES, MODEL)
+                response = self.client.chat.completions.create(
                     model=MODEL,
                     messages=messages,
                     max_tokens=2048,
@@ -146,17 +146,17 @@ class MeetingSummaryService:
                 content = response.choices[0].message.content
                 if content:
                     return content.strip()
-                raise ValueError("Empty response from HF")
+                raise ValueError("Empty response from Groq")
             except Exception as e:
                 last_error = e
                 logger.warning(
-                    "HF attempt %d failed: %s", attempt, str(e)[:200]
+                    "Groq attempt %d failed: %s", attempt, str(e)[:200]
                 )
                 if attempt < MAX_RETRIES:
-                    time.sleep(3)
+                    time.sleep(2)
 
         raise RuntimeError(
-            f"HF call failed after {MAX_RETRIES} attempts: {last_error}"
+            f"Groq call failed after {MAX_RETRIES} attempts: {last_error}"
         )
 
     def _generate_speaker_summaries(

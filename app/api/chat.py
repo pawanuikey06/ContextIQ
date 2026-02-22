@@ -1,10 +1,12 @@
 """
 Chat API — Q&A over meeting transcripts.
-Endpoints for asking questions, indexing meetings, and managing chat.
+Endpoints for asking questions (with streaming), indexing meetings, and managing chat.
 """
+import json
 import logging
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -84,6 +86,47 @@ async def chat_ask(body: ChatRequest):
     return ChatResponse(
         answer=result["answer"],
         citations=[Citation(**c) for c in result["citations"]],
+    )
+
+
+@router.post("/chat/ask/stream")
+async def chat_ask_stream(body: ChatRequest):
+    """
+    Stream a chat answer using Server-Sent Events (SSE).
+    Yields:
+      data: {"type": "token", "content": "word..."}
+      data: {"type": "citations", "content": [...]}
+      data: {"type": "done", "content": ""}
+    """
+    logger.info(
+        "Chat stream: %s (session=%s)",
+        body.question[:100],
+        body.session_id,
+    )
+
+    def event_generator():
+        try:
+            service = _get_rag_service()
+            for event_type, data in service.query_stream(
+                question=body.question,
+                session_id=body.session_id,
+                meeting_ids=body.meeting_ids,
+            ):
+                payload = json.dumps({"type": event_type, "content": data})
+                yield f"data: {payload}\n\n"
+        except Exception as e:
+            logger.error("Chat stream failed: %s", e)
+            error_payload = json.dumps({"type": "error", "content": str(e)})
+            yield f"data: {error_payload}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

@@ -4,7 +4,7 @@
 
 ---
 
-## ✨ Features (26 Capabilities)
+## ✨ Features
 
 ### 🎬 Ingestion & Processing
 | # | Feature | Details |

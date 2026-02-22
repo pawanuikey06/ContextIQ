@@ -273,18 +273,7 @@ streamlit run ui/streamlit_app.py                       # Frontend
 
 ---
 
-## 🏆 What Makes ContextIQ Unique
 
-| Feature | Otter.ai | Fireflies | Gong | ContextIQ |
-|---------|----------|-----------|------|-----------|
-| **Hindi summaries** | ❌ | ❌ | ❌ | ✅ |
-| **Fully local STT** | ❌ Cloud | ❌ Cloud | ❌ Cloud | ✅ On-device |
-| **RAG with citations** | ❌ | Basic | ❌ | ✅ Speaker+timestamp |
-| **SSE streaming chat** | ❌ | ❌ | ❌ | ✅ |
-| **HITL approval** | ❌ | ❌ | ❌ | ✅ |
-| **Follow-up email draft** | ❌ | ❌ | ❌ | ✅ |
-| **Action items + priority** | Basic | Basic | ✅ | ✅ Structured |
-| **Self-hosted / free** | $20/mo | $19/mo | $100+/mo | ✅ Free |
 
 ---
 

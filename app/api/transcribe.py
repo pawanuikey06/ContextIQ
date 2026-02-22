@@ -2,8 +2,11 @@
 POST /transcribe/{meeting_id}
 Uses the already-extracted audio to run transcription + speaker diarization.
 Saves merged output to storage/{meeting_id}/transcript.json.
+Auto-creates metadata.json with processing timestamps.
 """
+import json
 import logging
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pathlib import Path
 
@@ -74,10 +77,34 @@ async def transcribe_meeting(meeting_id: str):
         storage_path = storage_service.save(meeting_id, transcript_data)
         logger.info(f"[{meeting_id}] Transcript saved: {storage_path}")
 
-        # Step 4: Auto-index into ChromaDB for chatbot Q&A
+        # Step 3b: Auto-create metadata.json with processing info
         try:
-            from app.services.rag_service import MeetingRAGService
-            rag = MeetingRAGService()
+            now = datetime.now()
+            meta_path = Path("storage") / meeting_id / "metadata.json"
+            existing_meta = {}
+            if meta_path.exists():
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    existing_meta = json.load(f)
+
+            existing_meta.update({
+                "meeting_id": meeting_id,
+                "status": "transcribed",
+                "processed_at": now.isoformat(),
+                "processed_date": now.strftime("%B %d, %Y"),
+                "processed_day": now.strftime("%A"),
+                "processed_time": now.strftime("%I:%M %p"),
+                "segment_count": len(segments),
+                "speaker_count": len(speakers),
+            })
+
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(existing_meta, f, indent=2, ensure_ascii=False)
+            logger.info(f"[{meeting_id}] Metadata saved: {len(segments)} segments, {len(speakers)} speakers")
+        except Exception as e:
+            logger.warning(f"[{meeting_id}] Metadata creation failed (non-fatal): {e}")
+        try:
+            from app.api.chat import _get_rag_service
+            rag = _get_rag_service()
             chunk_count = rag.ingest_meeting(meeting_id)
             logger.info(f"[{meeting_id}] Auto-indexed: {chunk_count} chunks")
         except Exception as e:

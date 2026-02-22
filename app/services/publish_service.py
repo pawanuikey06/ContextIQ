@@ -163,6 +163,14 @@ class MeetingPublishService:
             pdf.add_section_heading("Meeting Summary (English)")
             pdf.add_english_text(overall_en)
 
+        # ── Speaker-wise Summaries (English) ──
+        speaker_summaries = summary_data.get("speaker_summaries_en", {})
+        if speaker_summaries:
+            pdf.add_section_heading("Speaker Contributions")
+            for speaker, summary in speaker_summaries.items():
+                if summary and summary.strip():
+                    pdf.add_speaker_block(speaker, summary)
+
         # ── Overall Summary (Hindi) ──
         overall_hi = summary_data.get("overall_summary_hi", "")
         if overall_hi:

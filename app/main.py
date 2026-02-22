@@ -3,6 +3,7 @@ FastAPI application entry point.
 Registers routers for upload, transcription, and meeting retrieval.
 """
 import logging
+from pathlib import Path
 from fastapi import FastAPI
 
 from app.api.upload import router as upload_router
@@ -12,6 +13,7 @@ from app.api.summarize import router as summarize_router
 from app.api.publish import router as publish_router
 from app.api.speaker_map import router as speaker_map_router
 from app.api.chat import router as chat_router
+from app.api.insights import router as insights_router
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +21,7 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s"
 )
 
-app = FastAPI(title="Meeting Intelligence System", version="1.0.0")
+app = FastAPI(title="Meeting Intelligence System", version="2.0.0")
 
 # Register all routers
 app.include_router(upload_router, tags=["Upload"])
@@ -29,6 +31,7 @@ app.include_router(summarize_router, tags=["Summary"])
 app.include_router(publish_router, tags=["Publish"])
 app.include_router(speaker_map_router, tags=["Speaker Map"])
 app.include_router(chat_router, tags=["Chat"])
+app.include_router(insights_router, tags=["Insights"])
 
 
 @app.get("/")
@@ -53,5 +56,69 @@ async def root():
             "POST /chat/clear/{session_id}",
             "POST /meeting/{meeting_id}/speaker-map",
             "GET  /meeting/{meeting_id}/speaker-map",
+            "POST /meeting/{meeting_id}/action-items",
+            "POST /meeting/{meeting_id}/auto-title",
+            "POST /meeting/{meeting_id}/followup-email",
+            "GET  /health",
         ]
     }
+
+
+@app.get("/health", tags=["System"])
+async def health_check():
+    """
+    System health check — GPU, storage, and ChromaDB status.
+    Useful for monitoring and hackathon demos.
+    """
+    try:
+        import torch
+
+        # GPU info
+        gpu_available = torch.cuda.is_available()
+        gpu_info = {}
+        if gpu_available:
+            gpu_info = {
+                "device": torch.cuda.get_device_name(0),
+                "vram_total_mb": round(torch.cuda.get_device_properties(0).total_memory / 1024**2),
+                "vram_free_mb": round(torch.cuda.mem_get_info()[0] / 1024**2),
+            }
+
+        # Storage stats
+        storage_dir = Path("storage")
+        meeting_dirs = [d for d in storage_dir.iterdir() if d.is_dir() and d.name != "chroma_db"] if storage_dir.exists() else []
+        total_size = sum(f.stat().st_size for d in meeting_dirs for f in d.rglob("*") if f.is_file())
+
+        # Meeting status breakdown
+        status_counts = {"uploaded": 0, "transcribed": 0, "summarized": 0, "published": 0}
+        for d in meeting_dirs:
+            if (d / "Meeting_Summary.pdf").exists():
+                status_counts["published"] += 1
+            elif (d / "summary.json").exists():
+                status_counts["summarized"] += 1
+            elif (d / "transcript.json").exists():
+                status_counts["transcribed"] += 1
+            else:
+                status_counts["uploaded"] += 1
+
+        # ChromaDB status
+        chroma_path = storage_dir / "chroma_db"
+        chroma_exists = chroma_path.exists()
+
+        return {
+            "status": "healthy",
+            "gpu": {
+                "available": gpu_available,
+                "compute_type": "float16" if gpu_available else "int8",
+                **gpu_info,
+            },
+            "storage": {
+                "total_meetings": len(meeting_dirs),
+                "disk_usage_mb": round(total_size / 1024**2, 1),
+                "meetings_by_status": status_counts,
+            },
+            "chromadb": {
+                "initialized": chroma_exists,
+            },
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}

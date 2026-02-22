@@ -456,62 +456,91 @@ if page == "💬 Meeting Chat":
         question = st.session_state["chat_messages"][-1]["content"]
 
         with st.chat_message("assistant"):
-            with st.spinner("🔍 Searching meetings..."):
-                try:
-                    payload = {
-                        "question": question,
-                        "session_id": st.session_state["chat_session_id"],
-                    }
-                    if selected_meetings:
-                        payload["meeting_ids"] = selected_meetings
+            try:
+                payload = {
+                    "question": question,
+                    "session_id": st.session_state["chat_session_id"],
+                }
+                if selected_meetings:
+                    payload["meeting_ids"] = selected_meetings
 
-                    res = requests.post(
-                        f"{CHAT_URL}/ask",
-                        json=payload,
-                        timeout=60,
-                    )
+                # SSE Streaming — tokens appear word by word
+                response = requests.post(
+                    f"{CHAT_URL}/ask/stream",
+                    json=payload,
+                    stream=True,
+                    timeout=60,
+                )
 
-                    if res.status_code == 200:
-                        chat_data = res.json()
-                        answer = chat_data.get("answer", "Sorry, I couldn't find an answer.")
-                        citations = chat_data.get("citations", [])
+                if response.status_code == 200:
+                    full_answer = []
+                    citations = []
+                    placeholder = st.empty()
 
-                        st.markdown(answer)
-                        if citations:
-                            with st.expander(f"📎 Sources ({len(citations)})", expanded=False):
-                                for c in citations:
-                                    mins = int(c['start'] // 60)
-                                    secs = int(c['start'] % 60)
-                                    st.markdown(
-                                        f"**{c['speaker']}** • `{mins}:{secs:02d}` • "
-                                        f"Meeting `{c['meeting_id'][:8]}...`\n\n"
-                                        f"> {c['excerpt']}"
-                                    )
+                    for line in response.iter_lines(decode_unicode=True):
+                        if not line or not line.startswith("data: "):
+                            continue
+                        try:
+                            event = json.loads(line[6:])  # strip "data: "
+                            etype = event.get("type", "")
 
-                        st.session_state["chat_messages"].append({
-                            "role": "assistant",
-                            "content": answer,
-                            "citations": citations,
-                        })
-                    else:
-                        error_msg = f"❌ Error: {res.text}"
-                        st.error(error_msg)
-                        st.session_state["chat_messages"].append({
-                            "role": "assistant",
-                            "content": error_msg,
-                        })
-                except requests.exceptions.ConnectionError:
-                    err_msg = "❌ Cannot connect to backend. Make sure FastAPI is running."
-                    st.error(err_msg)
-                    st.session_state["chat_messages"].append(
-                        {"role": "assistant", "content": err_msg}
-                    )
-                except Exception as e:
-                    err_msg = f"❌ Error: {e}"
-                    st.error(err_msg)
-                    st.session_state["chat_messages"].append(
-                        {"role": "assistant", "content": err_msg}
-                    )
+                            if etype == "token":
+                                full_answer.append(event["content"])
+                                # Update display with accumulated text
+                                placeholder.markdown("".join(full_answer) + "▌")
+
+                            elif etype == "citations":
+                                citations = event.get("content", [])
+
+                            elif etype == "done":
+                                break
+
+                            elif etype == "error":
+                                st.error(f"❌ {event.get('content', 'Unknown error')}")
+                                break
+                        except json.JSONDecodeError:
+                            continue
+
+                    # Final display (remove cursor)
+                    answer = "".join(full_answer)
+                    placeholder.markdown(answer)
+
+                    # Show citations
+                    if citations:
+                        with st.expander(f"📎 Sources ({len(citations)})", expanded=False):
+                            for c in citations:
+                                mins = int(c['start'] // 60)
+                                secs = int(c['start'] % 60)
+                                st.markdown(
+                                    f"**{c['speaker']}** • `{mins}:{secs:02d}` • "
+                                    f"Meeting `{c['meeting_id'][:8]}...`\n\n"
+                                    f"> {c['excerpt']}"
+                                )
+
+                    st.session_state["chat_messages"].append({
+                        "role": "assistant",
+                        "content": answer if answer else "Sorry, I couldn't find an answer.",
+                        "citations": citations,
+                    })
+                else:
+                    error_msg = f"❌ Error: {response.text}"
+                    st.error(error_msg)
+                    st.session_state["chat_messages"].append({
+                        "role": "assistant",
+                        "content": error_msg,
+                    })
+            except requests.exceptions.ConnectionError:
+                err_msg = "❌ Cannot connect to backend. Make sure FastAPI is running."
+                st.error(err_msg)
+                st.session_state["chat_messages"].append(
+                    {"role": "assistant", "content": err_msg}
+                )
+            except Exception as e:
+                err_msg = f"❌ Error: {e}"
+                st.error(err_msg)
+                st.session_state["chat_messages"].append(
+                    {"role": "assistant", "content": err_msg}
+                )
 
     # Footer for chat page
     st.markdown("""
@@ -644,7 +673,32 @@ if "transcript_data" in st.session_state:
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown(f'<span class="meeting-pill">🆔 {meeting_id}</span>', unsafe_allow_html=True)
+    pill_col, title_col = st.columns([3, 1])
+    with pill_col:
+        # Show auto-title if available, or meeting ID
+        auto_title = ""
+        try:
+            _meta_p = __import__('pathlib').Path(f"storage/{meeting_id}/metadata.json")
+            if _meta_p.exists():
+                _mm = json.load(open(_meta_p, encoding="utf-8"))
+                auto_title = _mm.get("auto_title", "")
+        except Exception:
+            pass
+        if auto_title:
+            st.markdown(f'<span class="meeting-pill">🆔 {meeting_id[:8]}...</span> &nbsp; <strong style="color:#c084fc;font-size:1.1rem;">{auto_title}</strong>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<span class="meeting-pill">🆔 {meeting_id}</span>', unsafe_allow_html=True)
+    with title_col:
+        if st.button("✨ Auto Title", use_container_width=True):
+            with st.spinner("Generating title..."):
+                try:
+                    title_res = requests.post(f"{API_BASE}/meeting/{meeting_id}/auto-title", timeout=30)
+                    if title_res.status_code == 200:
+                        st.rerun()
+                    else:
+                        st.error("Title generation failed")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
     # ── Metric Cards ──
     num_speakers = len(speakers)
@@ -734,8 +788,8 @@ if "transcript_data" in st.session_state:
                 st.rerun()
 
     # ── Tabs ──
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "💬 Chat View", "🗣️ Speaker View", "📊 Timeline", "🧠 AI Summaries"
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "💬 Chat View", "🗣️ Speaker View", "📊 Timeline", "🧠 AI Summaries", "🎯 Action Items"
     ])
 
     # ─── TAB 1: Chat View ───
@@ -1114,7 +1168,182 @@ if "transcript_data" in st.session_state:
                     use_container_width=True,
                 )
 
-    # ── Global Download ──
+    # ─── TAB 5: Action Items ───
+    with tab5:
+        st.markdown("""
+        <div class="section-header">
+            <span class="section-icon">🎯</span>
+            <p class="section-title">Action Items & Decisions</p>
+            <div class="section-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption("AI extracts action items, decisions, key takeaways, and follow-ups from your transcript.")
+
+        ai_col1, ai_col2, ai_spacer = st.columns([1, 1, 3])
+        with ai_col1:
+            extract_btn = st.button("🎯 Extract Action Items", type="primary", use_container_width=True)
+        with ai_col2:
+            force_extract = st.checkbox("♻️ Force regenerate", value=False, key="force_action")
+
+        if extract_btn:
+            with st.spinner("🧠 AI is extracting action items... This may take a moment."):
+                try:
+                    params = {"force": "true"} if force_extract else {}
+                    ai_res = requests.post(
+                        f"{API_BASE}/meeting/{meeting_id}/action-items",
+                        params=params,
+                        timeout=60,
+                    )
+                    if ai_res.status_code == 200:
+                        st.session_state["action_items_data"] = ai_res.json()
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Failed: {ai_res.text}")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+
+        # Try to load cached action items
+        if "action_items_data" not in st.session_state:
+            ai_cache = __import__('pathlib').Path(f"storage/{meeting_id}/action_items.json")
+            if ai_cache.exists():
+                st.session_state["action_items_data"] = json.load(open(ai_cache, encoding="utf-8"))
+
+        if "action_items_data" in st.session_state:
+            ai_data = st.session_state["action_items_data"]
+
+            # Action Items table
+            action_items = ai_data.get("action_items", [])
+            if action_items:
+                st.markdown("### 📋 Action Items")
+                for i, item in enumerate(action_items):
+                    priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(item.get("priority", "").lower(), "⚪")
+                    st.markdown(f"""
+                    <div class="summary-card">
+                        <div class="summary-card-title">{priority_emoji} {item.get('task', 'N/A')}</div>
+                        <div class="summary-card-content">
+                            👤 <strong>Assigned to:</strong> {item.get('assigned_to', 'Unassigned')}<br>
+                            📅 <strong>Deadline:</strong> {item.get('deadline', 'Not specified')}<br>
+                            ⚡ <strong>Priority:</strong> {item.get('priority', 'N/A').capitalize()}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No action items found in this meeting.")
+
+            # Decisions
+            decisions = ai_data.get("decisions", [])
+            if decisions:
+                st.markdown("### ⚖️ Decisions Made")
+                for d in decisions:
+                    st.markdown(f"""
+                    <div class="summary-card">
+                        <div class="summary-card-title">✅ {d.get('decision', 'N/A')}</div>
+                        <div class="summary-card-content">
+                            👤 <strong>Proposed by:</strong> {d.get('made_by', 'Unknown')}<br>
+                            💡 <strong>Context:</strong> {d.get('context', 'N/A')}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Key Takeaways
+            takeaways = ai_data.get("key_takeaways", [])
+            if takeaways:
+                st.markdown("### 💡 Key Takeaways")
+                for t in takeaways:
+                    st.markdown(f"- {t}")
+
+            # Follow-ups
+            followups = ai_data.get("follow_ups", [])
+            if followups:
+                st.markdown("### 🔄 Follow-ups Needed")
+                for f in followups:
+                    st.markdown(f"- {f}")
+
+            # Download
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.download_button(
+                "📥 Download Action Items JSON",
+                data=json.dumps(ai_data, indent=2, ensure_ascii=False),
+                file_name=f"action_items_{meeting_id}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+
+        # ── Follow-Up Email Draft ──
+        st.markdown("""
+        <div class="section-header">
+            <span class="section-icon">✉️</span>
+            <p class="section-title">Follow-Up Email Draft</p>
+            <div class="section-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption("AI generates a professional follow-up email combining summary, action items, and decisions.")
+
+        email_col1, email_col2, email_spacer = st.columns([1, 1, 3])
+        with email_col1:
+            draft_btn = st.button("✉️ Draft Follow-Up Email", type="primary", use_container_width=True)
+        with email_col2:
+            force_draft = st.checkbox("♻️ Force regenerate", value=False, key="force_email_draft")
+
+        if draft_btn:
+            with st.spinner("✉️ AI is drafting your follow-up email..."):
+                try:
+                    params = {"force": "true"} if force_draft else {}
+                    email_res = requests.post(
+                        f"{API_BASE}/meeting/{meeting_id}/followup-email",
+                        params=params,
+                        timeout=60,
+                    )
+                    if email_res.status_code == 200:
+                        st.session_state["followup_email"] = email_res.json()
+                        st.rerun()
+                    else:
+                        st.error(f"Failed: {email_res.text}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+        # Load cached email
+        if "followup_email" not in st.session_state:
+            email_cache = __import__('pathlib').Path(f"storage/{meeting_id}/followup_email.json")
+            if email_cache.exists():
+                st.session_state["followup_email"] = json.load(open(email_cache, encoding="utf-8"))
+
+        if "followup_email" in st.session_state:
+            email_data = st.session_state["followup_email"]
+            subject = email_data.get("subject", "")
+            body = email_data.get("body", "")
+            recipients = email_data.get("recipients_suggested", [])
+
+            st.markdown(f"**📧 Subject:** {subject}")
+            st.text_area(
+                "Email Body",
+                value=body,
+                height=250,
+                key="email_body_display",
+                label_visibility="collapsed",
+            )
+
+            if recipients:
+                st.markdown(f"**👥 Suggested recipients:** {', '.join(recipients)}")
+
+            dl_col_a, dl_col_b, dl_col_c = st.columns([1, 1, 3])
+            with dl_col_a:
+                st.download_button(
+                    "📥 Download as Text",
+                    data=f"Subject: {subject}\n\n{body}",
+                    file_name=f"followup_email_{meeting_id}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+            with dl_col_b:
+                st.download_button(
+                    "📥 Download as JSON",
+                    data=json.dumps(email_data, indent=2, ensure_ascii=False),
+                    file_name=f"followup_email_{meeting_id}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+
     st.markdown("<br>", unsafe_allow_html=True)
     dl_col1, dl_col2, dl_col3 = st.columns([1, 1, 3])
     with dl_col1:

@@ -1,4 +1,4 @@
-v# ContextIQ — Meeting Intelligence Platform
+# ContextIQ — Meeting Intelligence Platform
 
 > Upload a meeting video → get **speaker-diarized transcription**, **AI summaries** (English + Hindi), **RAG-powered chatbot**, and **one-click PDF/Email/Teams publishing** — all from a single premium Streamlit UI.
 

@@ -27,9 +27,9 @@ class MeetingRAGService:
         from langchain_huggingface import HuggingFaceEmbeddings
         from langchain_chroma import Chroma
 
-        self._api_key = os.getenv("GEMINI_API_KEY")
+        self._api_key = os.getenv("OPENROUTER_API_KEY")
         if not self._api_key:
-            raise ValueError("GEMINI_API_KEY not found in .env")
+            raise ValueError("OPENROUTER_API_KEY not found in .env")
 
         # Embedding model (small, fast, runs on CPU)
         logger.info("Loading embedding model...")
@@ -75,6 +75,15 @@ class MeetingRAGService:
             with open(map_path, "r", encoding="utf-8") as f:
                 speaker_map = json.load(f)
 
+        # Load meeting metadata (date/day info)
+        meeting_meta = {}
+        meta_path = STORAGE_DIR / meeting_id / "metadata.json"
+        if meta_path.exists():
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meeting_meta = json.load(f)
+        meeting_date = meeting_meta.get("processed_date", "Unknown date")
+        meeting_day = meeting_meta.get("processed_day", "Unknown day")
+
         segments = transcript.get("segments", [])
         if not segments:
             logger.warning("[%s] No segments to index", meeting_id)
@@ -96,7 +105,7 @@ class MeetingRAGService:
                 continue
 
             doc = Document(
-                page_content=f"{speaker}: {text}",
+                page_content=f"[{meeting_date}, {meeting_day}] {speaker}: {text}",
                 metadata={
                     "meeting_id": meeting_id,
                     "speaker": speaker,
@@ -104,6 +113,8 @@ class MeetingRAGService:
                     "start": start,
                     "end": end,
                     "chunk_index": i,
+                    "meeting_date": meeting_date,
+                    "meeting_day": meeting_day,
                 },
             )
             docs.append(doc)
@@ -149,7 +160,7 @@ class MeetingRAGService:
             dict with keys: "answer", "citations"
             Each citation: {meeting_id, speaker, start, end, excerpt}
         """
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
         # Build retriever (with optional meeting filter)
@@ -167,17 +178,29 @@ class MeetingRAGService:
         # Retrieve relevant documents
         docs = retriever.invoke(question)
 
-        # Build context from retrieved documents
+        # Build context from retrieved documents (clean, no raw timestamps)
         context_parts = []
         for doc in docs:
-            meta = doc.metadata
-            speaker = meta.get("speaker", "UNKNOWN")
-            start = meta.get("start", 0.0)
-            mid = meta.get("meeting_id", "unknown")[:8]
-            context_parts.append(
-                f"[Meeting {mid}, {speaker}, {start:.1f}s]: {doc.page_content}"
-            )
+            context_parts.append(doc.page_content)
         context = "\n".join(context_parts)
+
+        # Build meeting calendar — list of ALL indexed meetings with dates
+        # This enables date-based queries like "what did we discuss on Monday"
+        calendar_lines = []
+        try:
+            for mid in self.list_indexed_meetings():
+                meta_path = STORAGE_DIR / mid / "metadata.json"
+                if meta_path.exists():
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        mm = json.load(f)
+                    calendar_lines.append(
+                        f"- Meeting {mid[:8]}: {mm.get('processed_date', 'Unknown')}, "
+                        f"{mm.get('processed_day', 'Unknown')}, "
+                        f"{mm.get('processed_time', '')}"
+                    )
+        except Exception:
+            pass
+        meeting_calendar = "\n".join(calendar_lines) if calendar_lines else "No meetings indexed."
 
         # Build chat history from memory
         history = self._memories.get(session_id, [])
@@ -188,15 +211,19 @@ class MeetingRAGService:
                 hist_lines.append(f"{msg['role'].upper()}: {msg['content']}")
             history_text = "\n".join(hist_lines)
 
-        # System prompt
-        system_prompt = """You are ContextIQ, an intelligent meeting assistant. You answer questions ONLY using the meeting transcript excerpts provided below.
+        # System prompt — clean answers, no inline citations
+        system_prompt = f"""You are ContextIQ, an intelligent meeting assistant. You answer questions ONLY using the meeting transcript excerpts provided below.
+
+INDEXED MEETINGS:
+{meeting_calendar}
 
 RULES:
 1. Answer ONLY from the provided context. Never make up information.
 2. If the answer is not in the context, say: "I don't have that information in the meetings I've indexed."
-3. Always cite the speaker name and approximate timestamp for each fact.
+3. Give clean, natural answers. Do NOT include timestamps, speaker names in parentheses, or source references in your response. The UI shows sources separately.
 4. Be concise but thorough.
-5. Use the speaker's mapped name (not SPEAKER_XX IDs)."""
+5. When asked about dates or days (e.g. "what did we discuss on Monday"), use the INDEXED MEETINGS list above to identify which meetings match, then answer from their content.
+6. The date shown in brackets at the start of each excerpt tells you when that meeting happened."""
 
         # Build messages
         messages = [SystemMessage(content=system_prompt)]
@@ -209,10 +236,11 @@ RULES:
         user_content = f"MEETING EXCERPTS:\n{context}\n\nQUESTION: {question}"
         messages.append(HumanMessage(content=user_content))
 
-        # Call LLM
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=self._api_key,
+        # Call LLM via OpenRouter
+        llm = ChatOpenAI(
+            model="google/gemini-2.0-flash-001",
+            openai_api_key=self._api_key,
+            openai_api_base="https://openrouter.ai/api/v1",
             temperature=0.3,
         )
         response = llm.invoke(messages)

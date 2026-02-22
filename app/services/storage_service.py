@@ -42,5 +42,18 @@ class MeetingStorageService:
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
 
+        # Save meeting metadata with human-readable date/day
+        now_local = datetime.now()
+        metadata = {
+            "meeting_id": meeting_id,
+            "processed_at": now_local.isoformat(),
+            "processed_date": now_local.strftime("%B %d, %Y"),
+            "processed_day": now_local.strftime("%A"),
+            "processed_time": now_local.strftime("%I:%M %p"),
+        }
+        meta_path = meeting_dir / "metadata.json"
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
         logger.info(f"[{meeting_id}] Transcript saved to {file_path}")
         return str(file_path)

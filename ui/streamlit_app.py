@@ -316,7 +316,6 @@ st.markdown("""
     /* ── Hide Streamlit branding ── */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════
@@ -356,7 +355,14 @@ if page == "💬 Meeting Chat":
             st.caption(f"{len(indexed)} meeting(s) indexed")
             selected_meetings = []
             for mid in indexed:
-                if st.checkbox(f"📄 {mid[:8]}...", value=True, key=f"chat_m_{mid}"):
+                # Load metadata for date display
+                from pathlib import Path as _P
+                _meta_path = _P("storage") / mid / "metadata.json"
+                _label = f"{mid[:8]}..."
+                if _meta_path.exists():
+                    _mm = json.load(open(_meta_path, encoding="utf-8"))
+                    _label = f"{mid[:8]} • {_mm.get('processed_date', '')} ({_mm.get('processed_day', '')})"
+                if st.checkbox(f"📄 {_label}", value=True, key=f"chat_m_{mid}"):
                     selected_meetings.append(mid)
         else:
             st.caption("No meetings indexed yet.")

@@ -25,6 +25,8 @@
 
 ![ContextIQ Architecture Diagram](docs/architecture_diagram.png)
 
+> 📐 **Editable:** Open [`docs/architecture_diagram.drawio`](docs/architecture_diagram.drawio) in [draw.io](https://app.diagrams.net/) to edit.
+
 ```
 ContextIQ/
 ├── app/
@@ -64,6 +66,8 @@ ContextIQ/
 
 ![ContextIQ Workflow Diagram](docs/workflow_diagram.png)
 
+> 📐 **Editable:** Open [`docs/workflow_diagram.drawio`](docs/workflow_diagram.drawio) in [draw.io](https://app.diagrams.net/) to edit.
+
 ```mermaid
 flowchart LR
     A["📹 Upload Video"] --> B["🎵 Extract Audio<br/>(FFmpeg)"]
@@ -86,6 +90,16 @@ flowchart LR
    - **AI Summarization** → Zephyr 7B generates bilingual summaries → user reviews/edits (HITL) → publish as PDF/Email/Teams
    - **RAG Chatbot** → Transcript indexed into ChromaDB → ask questions with cited answers (Gemini)
    - **Interactive Views** → Chat View, Speaker View, Timeline Table via Streamlit
+
+---
+
+## 📊 Class Diagram
+
+A detailed class diagram showing all Pydantic schemas, service classes, and JSON storage structure is available as an editable draw.io file:
+
+> 📐 Open [`docs/class_diagram.drawio`](docs/class_diagram.drawio) in [draw.io](https://app.diagrams.net/) to view/edit.
+
+Includes: **SegmentOut**, **SpeakerSegment**, **TranscriptResponse**, **MeetingResponse**, **SummaryResponse**, **ChatRequest/Response**, **PublishRequest**, **SpeakerMapRequest**, and all service classes (**MeetingRAGService**, **MeetingSummaryService**, **MeetingPublishService**, **SummaryPDF**).
 
 ---
 

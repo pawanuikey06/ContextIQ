@@ -1,0 +1,223 @@
+<mxfile host="app.diagrams.net" modified="2026-02-22T16:20:00.000Z" agent="ContextIQ" version="22.1.0" type="device">
+  <diagram id="class_diagram" name="Database &amp; Class Diagram">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- TITLE -->
+        <mxCell id="title" value="&lt;b&gt;ContextIQ — Data Models &amp; Class Diagram&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=20;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="450" y="10" width="500" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════════════ -->
+        <!-- SECTION: Pydantic Schemas (schemas.py)   -->
+        <!-- ════════════════════════════════════════ -->
+        <mxCell id="schema_label" value="&lt;b&gt;Pydantic Schemas&lt;/b&gt; (app/schemas/schemas.py)" style="text;html=1;align=left;fontSize=14;fontColor=#5c6bc0;fontStyle=5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="55" width="350" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- SegmentOut -->
+        <mxCell id="cls_segment" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;SegmentOut&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#e8eaf6;strokeColor=#5c6bc0;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="200" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="seg_fields" value="+ start: float&lt;br&gt;+ end: float&lt;br&gt;+ speaker: str&lt;br&gt;+ text: str" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_segment">
+          <mxGeometry y="45" width="200" height="85" as="geometry"/>
+        </mxCell>
+
+        <!-- SpeakerSegment -->
+        <mxCell id="cls_spk_seg" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;SpeakerSegment&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#e8eaf6;strokeColor=#5c6bc0;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="270" y="90" width="200" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="spk_seg_fields" value="+ start: float&lt;br&gt;+ end: float&lt;br&gt;+ text: str" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_spk_seg">
+          <mxGeometry y="45" width="200" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- UploadResponse -->
+        <mxCell id="cls_upload_resp" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;UploadResponse&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#c8e6c9;strokeColor=#43a047;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="500" y="90" width="200" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="upload_resp_fields" value="+ meeting_id: str&lt;br&gt;+ audio_path: str&lt;br&gt;+ message: str" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_upload_resp">
+          <mxGeometry y="45" width="200" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- TranscriptResponse -->
+        <mxCell id="cls_transcript_resp" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;TranscriptResponse&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#c8e6c9;strokeColor=#43a047;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="730" y="90" width="240" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="transcript_resp_fields" value="+ meeting_id: str&lt;br&gt;+ audio_path: str&lt;br&gt;+ segments: List[SegmentOut]&lt;br&gt;+ speakers: Dict[str,&lt;br&gt;    List[SpeakerSegment]]" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_transcript_resp">
+          <mxGeometry y="45" width="240" height="95" as="geometry"/>
+        </mxCell>
+
+        <!-- MeetingResponse -->
+        <mxCell id="cls_meeting_resp" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;MeetingResponse&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#c8e6c9;strokeColor=#43a047;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="90" width="240" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="meeting_resp_fields" value="+ meeting_id: str&lt;br&gt;+ audio_path: str&lt;br&gt;+ segments: List[SegmentOut]&lt;br&gt;+ speakers: Dict[str,&lt;br&gt;    List[SpeakerSegment]]" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_meeting_resp">
+          <mxGeometry y="45" width="240" height="95" as="geometry"/>
+        </mxCell>
+
+        <!-- SummaryResponse -->
+        <mxCell id="cls_summary_resp" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;SummaryResponse&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#c8e6c9;strokeColor=#43a047;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="90" width="250" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="summary_resp_fields" value="+ meeting_id: str&lt;br&gt;+ speaker_summaries_en:&lt;br&gt;    Dict[str, str]&lt;br&gt;+ overall_summary_en: str&lt;br&gt;+ overall_summary_hi: str" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_summary_resp">
+          <mxGeometry y="45" width="250" height="95" as="geometry"/>
+        </mxCell>
+
+        <!-- Composition arrows -->
+        <mxCell id="comp1" value="segments *" style="endArrow=diamondThin;endFill=1;exitX=0.5;exitY=0;entryX=0.25;entryY=1;strokeColor=#5c6bc0;strokeWidth=1.5;" edge="1" parent="1" source="cls_segment" target="cls_transcript_resp">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="260"/>
+              <mxPoint x="790" y="260"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="comp2" value="speakers *" style="endArrow=diamondThin;endFill=1;exitX=0.5;exitY=0;entryX=0.75;entryY=1;strokeColor=#5c6bc0;strokeWidth=1.5;" edge="1" parent="1" source="cls_spk_seg" target="cls_transcript_resp">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="370" y="250"/>
+              <mxPoint x="910" y="250"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ════════════════════════════════════════ -->
+        <!-- SECTION: Chat API Schemas (chat.py)      -->
+        <!-- ════════════════════════════════════════ -->
+        <mxCell id="chat_label" value="&lt;b&gt;Chat API Schemas&lt;/b&gt; (app/api/chat.py)" style="text;html=1;align=left;fontSize=14;fontColor=#e53935;fontStyle=5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="290" width="300" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- ChatRequest -->
+        <mxCell id="cls_chat_req" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;ChatRequest&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#ffcdd2;strokeColor=#e53935;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="230" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="chat_req_fields" value="+ question: str&lt;br&gt;+ session_id: str = &quot;default&quot;&lt;br&gt;+ meeting_ids:&lt;br&gt;    Optional[List[str]]" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_chat_req">
+          <mxGeometry y="45" width="230" height="85" as="geometry"/>
+        </mxCell>
+
+        <!-- Citation -->
+        <mxCell id="cls_citation" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;Citation&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#ffcdd2;strokeColor=#e53935;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="300" y="320" width="200" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="citation_fields" value="+ meeting_id: str&lt;br&gt;+ speaker: str&lt;br&gt;+ start: float&lt;br&gt;+ end: float&lt;br&gt;+ excerpt: str" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_citation">
+          <mxGeometry y="45" width="200" height="105" as="geometry"/>
+        </mxCell>
+
+        <!-- ChatResponse -->
+        <mxCell id="cls_chat_resp" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;ChatResponse&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#ffcdd2;strokeColor=#e53935;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="530" y="320" width="210" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="chat_resp_fields" value="+ answer: str&lt;br&gt;+ citations: List[Citation]" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_chat_resp">
+          <mxGeometry y="45" width="210" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- IndexResponse -->
+        <mxCell id="cls_index_resp" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;IndexResponse&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#ffcdd2;strokeColor=#e53935;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="770" y="320" width="200" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="index_resp_fields" value="+ meeting_id: str&lt;br&gt;+ chunks_indexed: int&lt;br&gt;+ message: str" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_index_resp">
+          <mxGeometry y="45" width="200" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- Citation → ChatResponse composition -->
+        <mxCell id="comp_cite" value="citations *" style="endArrow=diamondThin;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.7;strokeColor=#e53935;strokeWidth=1.5;" edge="1" parent="1" source="cls_citation" target="cls_chat_resp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════════════ -->
+        <!-- SECTION: Publish & Speaker Map Schemas   -->
+        <!-- ════════════════════════════════════════ -->
+        <mxCell id="pub_label" value="&lt;b&gt;Publish &amp; HITL Schemas&lt;/b&gt; (app/api/publish.py, speaker_map.py)" style="text;html=1;align=left;fontSize=14;fontColor=#e65100;fontStyle=5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="510" width="480" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- PublishRequest -->
+        <mxCell id="cls_pub_req" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;PublishRequest&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#fff3e0;strokeColor=#e65100;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="545" width="250" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="pub_req_fields" value="+ meeting_title: Optional[str]&lt;br&gt;+ date: Optional[str]&lt;br&gt;+ email_recipients:&lt;br&gt;    Optional[List[str]]&lt;br&gt;+ teams_webhook_url:&lt;br&gt;    Optional[str]" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_pub_req">
+          <mxGeometry y="45" width="250" height="95" as="geometry"/>
+        </mxCell>
+
+        <!-- SpeakerMapRequest -->
+        <mxCell id="cls_spk_map" value="&lt;b&gt;&amp;lt;&amp;lt;BaseModel&amp;gt;&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;b&gt;SpeakerMapRequest&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=40;html=1;fillColor=#fff3e0;strokeColor=#e65100;rounded=1;arcSize=8;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="545" width="230" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="spk_map_fields" value="+ speaker_map:&lt;br&gt;    Dict[str, str]&lt;br&gt;  # SPEAKER_00: &quot;Pawan&quot;" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontFamily=monospace;" vertex="1" parent="cls_spk_map">
+          <mxGeometry y="45" width="230" height="65" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════════════ -->
+        <!-- SECTION: Service Classes                 -->
+        <!-- ════════════════════════════════════════ -->
+        <mxCell id="svc_label" value="&lt;b&gt;Service Classes&lt;/b&gt; (app/services/)" style="text;html=1;align=left;fontSize=14;fontColor=#00695c;fontStyle=5;" vertex="1" parent="1">
+          <mxGeometry x="40" y="720" width="300" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- MeetingRAGService -->
+        <mxCell id="cls_rag" value="&lt;b&gt;MeetingRAGService&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=25;html=1;fillColor=#e0f2f1;strokeColor=#00695c;rounded=1;arcSize=8;shadow=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="755" width="260" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="rag_fields" value="- vectorstore: Chroma&lt;br&gt;- embeddings: HuggingFace&lt;br&gt;- llm: ChatOpenAI (Gemini)&lt;br&gt;─────────────────────&lt;br&gt;+ ingest_meeting(id)&lt;br&gt;+ query(question, ...)&lt;br&gt;+ list_indexed_meetings()&lt;br&gt;+ clear_chat_history(sid)&lt;br&gt;+ get_meeting_chunk_count(id)" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontFamily=monospace;" vertex="1" parent="cls_rag">
+          <mxGeometry y="30" width="260" height="160" as="geometry"/>
+        </mxCell>
+
+        <!-- MeetingSummaryService -->
+        <mxCell id="cls_summ" value="&lt;b&gt;MeetingSummaryService&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=25;html=1;fillColor=#e0f2f1;strokeColor=#00695c;rounded=1;arcSize=8;shadow=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="330" y="755" width="280" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="summ_fields" value="- client: InferenceClient&lt;br&gt;─────────────────────────&lt;br&gt;+ summarize(id, force, prompt)&lt;br&gt;- _build_conversation_text()&lt;br&gt;- _call_llm(system, user)&lt;br&gt;- _generate_speaker_summaries()&lt;br&gt;- _generate_overall_summary_en()&lt;br&gt;- _generate_overall_summary_hi()&lt;br&gt;- _load_speaker_map(id)&lt;br&gt;- _apply_speaker_map(text, map)" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontFamily=monospace;" vertex="1" parent="cls_summ">
+          <mxGeometry y="30" width="280" height="160" as="geometry"/>
+        </mxCell>
+
+        <!-- MeetingPublishService -->
+        <mxCell id="cls_pub" value="&lt;b&gt;MeetingPublishService&lt;/b&gt;" style="swimlane;fontStyle=1;align=center;startSize=25;html=1;fillColor=#e0f2f1;strokeColor=#00695c;rounded=1;arcSize=8;shadow=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="640" y="755" width="260" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="pub_fields" value="─────────────────────&lt;br&gt;+ generate_pdf(data, path, ...)&lt;br&gt;+ send_email(pdf, title, ...)&lt;br&gt;+ send_to_teams(data, title,...)&lt;br&gt;+ publish(id, title, date,&lt;br&gt;    recipients, webhook)" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontFamily=monospace;" vertex="1" parent="cls_pub">
+          <mxGeometry y="30" width="260" height="140" as="geometry"/>
+        </mxCell>
+
+        <!-- SummaryPDF -->
+        <mxCell id="cls_pdf" value="&lt;b&gt;SummaryPDF&lt;/b&gt; (extends FPDF)" style="swimlane;fontStyle=1;align=center;startSize=25;html=1;fillColor=#e0f2f1;strokeColor=#00695c;rounded=1;arcSize=8;shadow=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="930" y="755" width="250" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="pdf_fields" value="─────────────────────&lt;br&gt;+ header()&lt;br&gt;+ footer()&lt;br&gt;+ add_title(title)&lt;br&gt;+ add_date(date)&lt;br&gt;+ add_section_heading(h)&lt;br&gt;+ add_english_text(text)&lt;br&gt;+ add_hindi_text(text)&lt;br&gt;+ add_speaker_block(spk, sum)" style="text;html=1;align=left;verticalAlign=top;fontSize=10;fontFamily=monospace;" vertex="1" parent="cls_pdf">
+          <mxGeometry y="30" width="250" height="140" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════════════ -->
+        <!-- SECTION: JSON File Storage Structure     -->
+        <!-- ════════════════════════════════════════ -->
+        <mxCell id="storage_label" value="&lt;b&gt;File Storage Structure&lt;/b&gt; (storage/{meeting_id}/)" style="text;html=1;align=left;fontSize=14;fontColor=#4a148c;fontStyle=5;" vertex="1" parent="1">
+          <mxGeometry x="650" y="510" width="400" height="25" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fs_transcript" value="&lt;b&gt;📄 transcript.json&lt;/b&gt;&lt;br&gt;─────────────────&lt;br&gt;created_at: datetime&lt;br&gt;meeting_id: str&lt;br&gt;audio_path: str&lt;br&gt;segments: [SegmentOut]&lt;br&gt;speakers: {id: [SpeakerSeg]}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede7f6;strokeColor=#4a148c;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="650" y="545" width="210" height="140" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fs_summary" value="&lt;b&gt;📄 summary.json&lt;/b&gt;&lt;br&gt;─────────────────&lt;br&gt;meeting_id: str&lt;br&gt;speaker_summaries_en:&lt;br&gt;  {speaker_id: str}&lt;br&gt;overall_summary_en: str&lt;br&gt;overall_summary_hi: str" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede7f6;strokeColor=#4a148c;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="890" y="545" width="210" height="140" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fs_speaker_map" value="&lt;b&gt;📄 speaker_map.json&lt;/b&gt;&lt;br&gt;─────────────────&lt;br&gt;{&lt;br&gt;  &quot;SPEAKER_00&quot;: &quot;Pawan&quot;,&lt;br&gt;  &quot;SPEAKER_01&quot;: &quot;Ravi&quot;&lt;br&gt;}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede7f6;strokeColor=#4a148c;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="545" width="200" height="110" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fs_pdf" value="&lt;b&gt;📄 Meeting_Summary.pdf&lt;/b&gt;&lt;br&gt;─────────────────&lt;br&gt;Generated PDF with:&lt;br&gt;- English summary&lt;br&gt;- Hindi summary&lt;br&gt;- Speaker summaries&lt;br&gt;- Unicode font support" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede7f6;strokeColor=#4a148c;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="545" width="200" height="140" as="geometry"/>
+        </mxCell>
+
+        <!-- ChromaDB -->
+        <mxCell id="fs_chroma" value="&lt;b&gt;🗃️ chroma_db/&lt;/b&gt;&lt;br&gt;─────────────────&lt;br&gt;ChromaDB vector store&lt;br&gt;Collection: meeting_kb&lt;br&gt;&lt;br&gt;Each document:&lt;br&gt;- page_content: text&lt;br&gt;- metadata: {meeting_id,&lt;br&gt;   speaker, start, end}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede7f6;strokeColor=#4a148c;fontSize=10;align=left;verticalAlign=top;spacingLeft=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1210" y="755" width="210" height="160" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

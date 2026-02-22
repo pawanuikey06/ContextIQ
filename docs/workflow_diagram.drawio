@@ -1,0 +1,156 @@
+<mxfile host="app.diagrams.net" modified="2026-02-22T16:20:00.000Z" agent="ContextIQ" version="22.1.0" type="device">
+  <diagram id="workflow" name="Workflow Pipeline">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="900" math="0" shadow="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- TITLE -->
+        <mxCell id="title" value="&lt;b&gt;ContextIQ — End-to-End Workflow Pipeline&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=20;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="550" y="15" width="500" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════ -->
+        <!-- MAIN PIPELINE (horizontal)       -->
+        <!-- ════════════════════════════════ -->
+
+        <!-- Step 1: Upload Video -->
+        <mxCell id="step1" value="&lt;b&gt;1. Upload Video&lt;/b&gt;&lt;br&gt;&lt;br&gt;📹 .mp4 / .mkv / .mov&lt;br&gt;POST /upload-video" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#5c6bc0;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="180" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Step 2: Extract Audio -->
+        <mxCell id="step2" value="&lt;b&gt;2. Extract Audio&lt;/b&gt;&lt;br&gt;&lt;br&gt;🎵 FFmpeg&lt;br&gt;16 kHz mono WAV" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#5c6bc0;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="280" y="120" width="180" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Step 3: Transcribe + Diarize -->
+        <mxCell id="step3" value="&lt;b&gt;3. Transcribe + Diarize&lt;/b&gt;&lt;br&gt;&lt;br&gt;🗣️ WhisperX STT&lt;br&gt;+ pyannote speakers&lt;br&gt;⚡ GPU accelerated" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c5cae9;strokeColor=#3f51b5;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="520" y="110" width="200" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Step 4: Save Transcript -->
+        <mxCell id="step4" value="&lt;b&gt;4. Save Transcript&lt;/b&gt;&lt;br&gt;&lt;br&gt;💾 transcript.json&lt;br&gt;storage/{meeting_id}/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c5cae9;strokeColor=#3f51b5;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="780" y="120" width="190" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrows: linear pipeline -->
+        <mxCell id="a12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#5c6bc0;strokeWidth=2;" edge="1" parent="1" source="step1" target="step2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a23" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#5c6bc0;strokeWidth=2;" edge="1" parent="1" source="step2" target="step3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a34" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#3f51b5;strokeWidth=2;" edge="1" parent="1" source="step3" target="step4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════ -->
+        <!-- BRANCH POINT (diamond)           -->
+        <!-- ════════════════════════════════ -->
+        <mxCell id="branch" value="" style="rhombus;whiteSpace=wrap;html=1;fillColor=#7986cb;strokeColor=#3f51b5;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="145" width="50" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="a4b" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#3f51b5;strokeWidth=2;" edge="1" parent="1" source="step4" target="branch">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════ -->
+        <!-- PATH A: AI Summary Pipeline      -->
+        <!-- ════════════════════════════════ -->
+        <mxCell id="path_a_label" value="&lt;b&gt;Path A: Summarization &amp; Publishing&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#e53935;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="55" width="280" height="25" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="step5a" value="&lt;b&gt;5a. AI Summary&lt;/b&gt;&lt;br&gt;&lt;br&gt;🤖 Zephyr 7B&lt;br&gt;Speaker-wise EN&lt;br&gt;+ Overall EN + HI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcdd2;strokeColor=#e53935;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="80" width="170" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="step6a" value="&lt;b&gt;6a. Human Review&lt;/b&gt;&lt;br&gt;&lt;br&gt;✅ HITL Approval&lt;br&gt;Edit summaries&lt;br&gt;before publishing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcdd2;strokeColor=#e53935;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="80" width="170" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="step7a" value="&lt;b&gt;7a. Publish&lt;/b&gt;&lt;br&gt;&lt;br&gt;📄 PDF&lt;br&gt;📧 Email (SMTP)&lt;br&gt;💬 Teams (Webhook)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcdd2;strokeColor=#e53935;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1520" y="80" width="170" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Path A arrows -->
+        <mxCell id="ab1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0;entryX=0;entryY=0.5;strokeColor=#e53935;strokeWidth=2;" edge="1" parent="1" source="branch" target="step5a">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ab2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#e53935;strokeWidth=2;" edge="1" parent="1" source="step5a" target="step6a">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ab3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#e53935;strokeWidth=2;" edge="1" parent="1" source="step6a" target="step7a">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════ -->
+        <!-- PATH B: RAG Chat                 -->
+        <!-- ════════════════════════════════ -->
+        <mxCell id="path_b_label" value="&lt;b&gt;Path B: RAG Chatbot&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#2e7d32;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="210" width="200" height="25" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="step5b" value="&lt;b&gt;5b. Index Meeting&lt;/b&gt;&lt;br&gt;&lt;br&gt;📚 Chunk transcript&lt;br&gt;Embed with MiniLM-L6&lt;br&gt;Store in ChromaDB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#43a047;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="240" width="180" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="step6b" value="&lt;b&gt;6b. Q&amp;A Chat&lt;/b&gt;&lt;br&gt;&lt;br&gt;💬 LangChain retrieval&lt;br&gt;Gemini (OpenRouter)&lt;br&gt;Cited answers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#43a047;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="240" width="180" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Path B arrows -->
+        <mxCell id="bb1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#43a047;strokeWidth=2;" edge="1" parent="1" source="branch" target="step5b">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="bb2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#43a047;strokeWidth=2;" edge="1" parent="1" source="step5b" target="step6b">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════ -->
+        <!-- PATH C: Interactive Views        -->
+        <!-- ════════════════════════════════ -->
+        <mxCell id="path_c_label" value="&lt;b&gt;Path C: Interactive Views&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#e65100;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="370" width="220" height="25" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="step5c" value="&lt;b&gt;5c. Streamlit Views&lt;/b&gt;&lt;br&gt;&lt;br&gt;💬 Chat View&lt;br&gt;🗣️ Speaker View&lt;br&gt;🕒 Timeline Table" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="400" width="180" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="step6c" value="&lt;b&gt;5d. Speaker Mapping&lt;/b&gt;&lt;br&gt;&lt;br&gt;👤 HITL: Map&lt;br&gt;SPEAKER_00 → Name&lt;br&gt;Persists in JSON" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;fontSize=11;shadow=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="400" width="180" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Path C arrows -->
+        <mxCell id="cb1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=1;entryX=0;entryY=0.5;strokeColor=#e65100;strokeWidth=2;" edge="1" parent="1" source="branch" target="step5c">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="cb2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#e65100;strokeWidth=2;" edge="1" parent="1" source="step5c" target="step6c">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ════════════════════════════════ -->
+        <!-- LEGEND                           -->
+        <!-- ════════════════════════════════ -->
+        <mxCell id="legend_box" value="&lt;b&gt;Legend&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontSize=12;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="300" width="250" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg1" value="Core Pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#5c6bc0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="330" width="100" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg2" value="Summarization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcdd2;strokeColor=#e53935;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="365" width="100" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg3" value="RAG Chat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#43a047;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="400" width="100" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg4" value="Interactive Views" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="435" width="100" height="25" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

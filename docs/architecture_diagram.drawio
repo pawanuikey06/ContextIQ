@@ -1,0 +1,181 @@
+<mxfile host="app.diagrams.net" modified="2026-02-22T16:20:00.000Z" agent="ContextIQ" version="22.1.0" type="device">
+  <diagram id="architecture" name="Architecture">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- TITLE                                    -->
+        <!-- ═══════════════════════════════════════ -->
+        <mxCell id="title" value="&lt;b&gt;ContextIQ — System Architecture&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;fontSize=22;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="530" y="10" width="440" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- LAYER 1: PRESENTATION (Streamlit UI)     -->
+        <!-- ═══════════════════════════════════════ -->
+        <mxCell id="ui_group" value="&lt;b&gt;Presentation Layer&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontSize=14;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="70" width="1300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_label" value="&lt;b&gt;Streamlit UI&lt;/b&gt;&lt;br&gt;streamlit_app.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#c084fc;strokeColor=#818cf8;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="100" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_upload" value="📹 Upload&lt;br&gt;Video" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="280" y="100" width="100" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_chat_view" value="💬 Chat&lt;br&gt;View" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="390" y="100" width="90" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_speaker_view" value="🗣️ Speaker&lt;br&gt;View" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="490" y="100" width="90" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_timeline" value="🕒 Timeline&lt;br&gt;View" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="590" y="100" width="90" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_summary" value="📝 Summary&lt;br&gt;Review" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="690" y="100" width="100" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_publish" value="📄 Publish&lt;br&gt;(PDF/Email)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="800" y="100" width="100" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_chatbot" value="💬 AI&lt;br&gt;Chatbot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="910" y="100" width="90" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_speaker_map" value="👤 Speaker&lt;br&gt;Mapping" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="100" width="100" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrow: UI → API -->
+        <mxCell id="arrow_ui_api" value="REST API (HTTP)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#818cf8;strokeWidth=2;fontSize=11;fontColor=#818cf8;" edge="1" parent="1" source="ui_group" target="api_group">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- LAYER 2: API LAYER (FastAPI)             -->
+        <!-- ═══════════════════════════════════════ -->
+        <mxCell id="api_group" value="&lt;b&gt;API Layer — FastAPI&lt;/b&gt;  (main.py)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontSize=14;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="240" width="1300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="api_upload" value="&lt;b&gt;POST&lt;/b&gt;&lt;br&gt;/upload-video&lt;br&gt;&lt;font style='font-size:9px'&gt;upload.py&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#a5d6a7;strokeColor=#4caf50;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="275" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="api_transcribe" value="&lt;b&gt;POST&lt;/b&gt;&lt;br&gt;/transcribe/{id}&lt;br&gt;&lt;font style='font-size:9px'&gt;transcribe.py&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#a5d6a7;strokeColor=#4caf50;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="275" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="api_meeting" value="&lt;b&gt;GET&lt;/b&gt;&lt;br&gt;/meeting/{id}&lt;br&gt;&lt;font style='font-size:9px'&gt;diarization.py&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#a5d6a7;strokeColor=#4caf50;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="410" y="275" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="api_summarize" value="&lt;b&gt;POST&lt;/b&gt;&lt;br&gt;/summarize/{id}&lt;br&gt;&lt;font style='font-size:9px'&gt;summarize.py&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#a5d6a7;strokeColor=#4caf50;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="275" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="api_publish" value="&lt;b&gt;POST/GET&lt;/b&gt;&lt;br&gt;/publish/{id}&lt;br&gt;&lt;font style='font-size:9px'&gt;publish.py&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#a5d6a7;strokeColor=#4caf50;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="275" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="api_chat" value="&lt;b&gt;POST/GET&lt;/b&gt;&lt;br&gt;/chat/*&lt;br&gt;&lt;font style='font-size:9px'&gt;chat.py&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#a5d6a7;strokeColor=#4caf50;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="840" y="275" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="api_speaker_map" value="&lt;b&gt;POST/GET&lt;/b&gt;&lt;br&gt;/meeting/{id}/speaker-map&lt;br&gt;&lt;font style='font-size:9px'&gt;speaker_map.py&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#a5d6a7;strokeColor=#4caf50;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="275" width="180" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrow: API → Services -->
+        <mxCell id="arrow_api_svc" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="api_group" target="svc_group">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- LAYER 3: SERVICES LAYER                  -->
+        <!-- ═══════════════════════════════════════ -->
+        <mxCell id="svc_group" value="&lt;b&gt;Services Layer&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontSize=14;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="410" width="1300" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="svc_video" value="&lt;b&gt;video_to_audio&lt;/b&gt;&lt;br&gt;FFmpeg&lt;br&gt;Video → WAV" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#ce93d8;strokeColor=#9c27b0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="445" width="130" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="svc_stt" value="&lt;b&gt;stt_service&lt;/b&gt;&lt;br&gt;WhisperX + pyannote&lt;br&gt;Transcription + Diarization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#ce93d8;strokeColor=#9c27b0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="445" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="svc_speaker" value="&lt;b&gt;speaker_service&lt;/b&gt;&lt;br&gt;Speaker-wise&lt;br&gt;Segment Grouping" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#ce93d8;strokeColor=#9c27b0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="445" width="130" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="svc_summary" value="&lt;b&gt;summary_service&lt;/b&gt;&lt;br&gt;Zephyr 7B (HuggingFace)&lt;br&gt;EN + HI Summaries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#ce93d8;strokeColor=#9c27b0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="580" y="445" width="160" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="svc_publish" value="&lt;b&gt;publish_service&lt;/b&gt;&lt;br&gt;PDF (fpdf2) + Email&lt;br&gt;(SMTP) + Teams (Webhook)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#ce93d8;strokeColor=#9c27b0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="750" y="445" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="svc_rag" value="&lt;b&gt;rag_service&lt;/b&gt;&lt;br&gt;LangChain + ChromaDB&lt;br&gt;+ Gemini (RAG Q&amp;A)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#ce93d8;strokeColor=#9c27b0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="930" y="445" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="svc_storage" value="&lt;b&gt;storage_service&lt;/b&gt;&lt;br&gt;JSON Persistence&lt;br&gt;to Disk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a1a2e;fontColor=#ce93d8;strokeColor=#9c27b0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="445" width="130" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrow: Services → Data -->
+        <mxCell id="arrow_svc_data" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#9673a6;strokeWidth=2;" edge="1" parent="1" source="svc_group" target="data_group">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- LAYER 4: DATA & STORAGE                  -->
+        <!-- ═══════════════════════════════════════ -->
+        <mxCell id="data_group" value="&lt;b&gt;Data &amp; Storage Layer&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontSize=14;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="590" width="1300" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="data_audio" value="&lt;b&gt;data/audio/&lt;/b&gt;&lt;br&gt;Extracted WAV files" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#fff9c4;strokeColor=#f9a825;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="160" y="620" width="150" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="data_transcript" value="&lt;b&gt;storage/{id}/&lt;/b&gt;&lt;br&gt;transcript.json&lt;br&gt;summary.json&lt;br&gt;speaker_map.json" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#fff9c4;strokeColor=#f9a825;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="430" y="610" width="170" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="data_pdf" value="&lt;b&gt;storage/{id}/&lt;/b&gt;&lt;br&gt;Meeting_Summary.pdf" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#fff9c4;strokeColor=#f9a825;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="700" y="620" width="170" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="data_chroma" value="&lt;b&gt;storage/chroma_db/&lt;/b&gt;&lt;br&gt;ChromaDB Vector Store&lt;br&gt;(Embeddings)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#fff9c4;strokeColor=#f9a825;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="980" y="610" width="180" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!-- EXTERNAL SERVICES (right side)           -->
+        <!-- ═══════════════════════════════════════ -->
+        <mxCell id="ext_label" value="&lt;b&gt;External Services&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#b71c1c;" vertex="1" parent="1">
+          <mxGeometry x="1440" y="230" width="130" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="ext_hf" value="☁️ &lt;b&gt;HuggingFace&lt;/b&gt;&lt;br&gt;Inference API&lt;br&gt;(Zephyr 7B)" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#ffcdd2;strokeColor=#e53935;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="270" width="160" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="ext_gemini" value="☁️ &lt;b&gt;Gemini&lt;/b&gt;&lt;br&gt;via OpenRouter&lt;br&gt;(RAG LLM)" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#c8e6c9;strokeColor=#43a047;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="370" width="160" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="ext_gpu" value="⚡ &lt;b&gt;NVIDIA GPU&lt;/b&gt;&lt;br&gt;CUDA 12.8&lt;br&gt;(WhisperX accel)" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#5c6bc0;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="470" width="160" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="ext_smtp" value="📧 &lt;b&gt;SMTP&lt;/b&gt;&lt;br&gt;Email Server" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#e1bee7;strokeColor=#8e24aa;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="560" width="140" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="ext_teams" value="💬 &lt;b&gt;MS Teams&lt;/b&gt;&lt;br&gt;Webhook" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#bbdefb;strokeColor=#1e88e5;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="640" width="140" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrows to external -->
+        <mxCell id="arrow_svc_hf" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#e53935;strokeWidth=1;dashed=1;" edge="1" parent="1" source="svc_summary" target="ext_hf">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="arrow_svc_gemini" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#43a047;strokeWidth=1;dashed=1;" edge="1" parent="1" source="svc_rag" target="ext_gemini">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="arrow_svc_gpu" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#5c6bc0;strokeWidth=1;dashed=1;" edge="1" parent="1" source="svc_stt" target="ext_gpu">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="arrow_svc_smtp" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#8e24aa;strokeWidth=1;dashed=1;" edge="1" parent="1" source="svc_publish" target="ext_smtp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="arrow_svc_teams" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;strokeColor=#1e88e5;strokeWidth=1;dashed=1;" edge="1" parent="1" source="svc_publish" target="ext_teams">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

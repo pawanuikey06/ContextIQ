@@ -74,6 +74,15 @@ async def transcribe_meeting(meeting_id: str):
         storage_path = storage_service.save(meeting_id, transcript_data)
         logger.info(f"[{meeting_id}] Transcript saved: {storage_path}")
 
+        # Step 4: Auto-index into ChromaDB for chatbot Q&A
+        try:
+            from app.services.rag_service import MeetingRAGService
+            rag = MeetingRAGService()
+            chunk_count = rag.ingest_meeting(meeting_id)
+            logger.info(f"[{meeting_id}] Auto-indexed: {chunk_count} chunks")
+        except Exception as e:
+            logger.warning(f"[{meeting_id}] Auto-index failed (non-fatal): {e}")
+
     except Exception as e:
         logger.error(f"[{meeting_id}] Transcription failed: {e}")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")

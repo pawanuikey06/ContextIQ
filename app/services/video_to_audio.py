@@ -22,11 +22,14 @@ class VideoAudioConverter:
             self.ffmpeg_path,
             "-y",
             "-i", str(video_path),
-            "-vn",
+            "-map", "0:a:0",        # Only take the first audio stream (skip subtitles/data)
+            "-vn",                   # No video
             "-acodec", "pcm_s16le",
             "-ar", "16000",
             "-ac", "1",
             str(audio_path)
         ]
 
-        subprocess.run(cmd, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")

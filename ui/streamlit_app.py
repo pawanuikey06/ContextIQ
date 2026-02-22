@@ -444,6 +444,69 @@ if "transcript_data" in st.session_state:
     </div>
     """, unsafe_allow_html=True)
 
+    # ── Speaker Name Mapping (HITL) ──
+    # Initialize speaker map in session state
+    if "speaker_map" not in st.session_state:
+        # Try to load saved mapping from backend
+        try:
+            map_res = requests.get(f"{API_BASE}/meeting/{meeting_id}/speaker-map", timeout=5)
+            if map_res.status_code == 200:
+                st.session_state["speaker_map"] = map_res.json().get("speaker_map", {})
+            else:
+                st.session_state["speaker_map"] = {}
+        except Exception:
+            st.session_state["speaker_map"] = {}
+
+    smap = st.session_state["speaker_map"]
+
+    # Helper: resolve display name
+    def display_name(spk_id):
+        return smap.get(spk_id, spk_id)
+
+    with st.expander("✏️ Speaker Name Mapping — click to rename speakers", expanded=False):
+        st.caption("Replace auto-detected speaker IDs with real names. Click 'Apply Names' to save.")
+        speaker_ids = list(speakers.keys())
+        rename_cols = st.columns(min(len(speaker_ids), 3))
+
+        new_map = {}
+        for i, spk_id in enumerate(speaker_ids):
+            with rename_cols[i % min(len(speaker_ids), 3)]:
+                new_name = st.text_input(
+                    spk_id,
+                    value=smap.get(spk_id, ""),
+                    placeholder=f"e.g. Pawan",
+                    key=f"rename_{spk_id}",
+                )
+                if new_name.strip():
+                    new_map[spk_id] = new_name.strip()
+
+        apply_col, clear_col, _ = st.columns([1, 1, 3])
+        with apply_col:
+            if st.button("✅ Apply Names", type="primary", use_container_width=True):
+                st.session_state["speaker_map"] = new_map
+                # Save to backend
+                try:
+                    requests.post(
+                        f"{API_BASE}/meeting/{meeting_id}/speaker-map",
+                        json={"speaker_map": new_map},
+                        timeout=5,
+                    )
+                except Exception:
+                    pass
+                st.rerun()
+        with clear_col:
+            if st.button("🔄 Reset Names", use_container_width=True):
+                st.session_state["speaker_map"] = {}
+                try:
+                    requests.post(
+                        f"{API_BASE}/meeting/{meeting_id}/speaker-map",
+                        json={"speaker_map": {}},
+                        timeout=5,
+                    )
+                except Exception:
+                    pass
+                st.rerun()
+
     # ── Tabs ──
     tab1, tab2, tab3, tab4 = st.tabs([
         "💬 Chat View", "🗣️ Speaker View", "📊 Timeline", "🧠 AI Summaries"
@@ -456,11 +519,12 @@ if "transcript_data" in st.session_state:
             spk = seg["speaker"]
             idx = speaker_list.index(spk) if spk in speaker_list else 0
             color_class = f"spk-{idx % 6}"
+            name = display_name(spk)
 
             st.markdown(f"""
             <div class="chat-bubble">
                 <div class="chat-speaker {color_class}">
-                    {spk} <span class="chat-time">{seg['start']:.1f}s – {seg['end']:.1f}s</span>
+                    {name} <span class="chat-time">{seg['start']:.1f}s – {seg['end']:.1f}s</span>
                 </div>
                 <div class="chat-text">{seg['text']}</div>
             </div>
@@ -469,7 +533,8 @@ if "transcript_data" in st.session_state:
     # ─── TAB 2: Speaker View ───
     with tab2:
         for speaker, segs in speakers.items():
-            with st.expander(f"🗣️ {speaker} — {len(segs)} segments", expanded=False):
+            name = display_name(speaker)
+            with st.expander(f"🗣️ {name} — {len(segs)} segments", expanded=False):
                 for s in segs:
                     st.markdown(
                         f"**`{s['start']:.1f}s – {s['end']:.1f}s`** &nbsp; {s['text']}",
@@ -480,6 +545,8 @@ if "transcript_data" in st.session_state:
     with tab3:
         df = pd.DataFrame(segments)
         df.columns = ["Start (s)", "End (s)", "Speaker", "Text"]
+        # Apply mapped speaker names
+        df["Speaker"] = df["Speaker"].map(lambda s: display_name(s))
         st.dataframe(
             df,
             use_container_width=True,
@@ -514,6 +581,13 @@ if "transcript_data" in st.session_state:
         if generate_btn:
             with st.spinner("🧠 AI is analyzing your meeting... This may take up to a minute."):
                 try:
+                    # Sync speaker map to backend before generating
+                    if smap:
+                        requests.post(
+                            f"{API_BASE}/meeting/{meeting_id}/speaker-map",
+                            json={"speaker_map": smap},
+                            timeout=5,
+                        )
                     params = {"force": "true"} if force_regen else {}
                     res = requests.post(
                         f"{SUMMARIZE_URL}/{meeting_id}",
@@ -524,6 +598,7 @@ if "transcript_data" in st.session_state:
                         st.error(f"❌ Summary generation failed: {res.text}")
                     else:
                         st.session_state["summary_data"] = res.json()
+                        st.session_state.pop("summary_approved", None)
                         st.rerun()
                 except requests.exceptions.ConnectionError:
                     st.error("❌ Cannot connect to backend. Make sure FastAPI is running.")
@@ -534,7 +609,7 @@ if "transcript_data" in st.session_state:
         if "summary_data" in st.session_state:
             summary = st.session_state["summary_data"]
 
-            # Speaker-wise summaries
+            # Speaker-wise summaries (use mapped names)
             st.markdown("""
             <div class="section-header">
                 <span class="section-icon">🗣️</span>
@@ -544,49 +619,265 @@ if "transcript_data" in st.session_state:
             """, unsafe_allow_html=True)
 
             speaker_sums = summary.get("speaker_summaries_en", {})
-            cols = st.columns(min(len(speaker_sums), 2))
+            cols = st.columns(min(len(speaker_sums), 2)) if speaker_sums else [st]
             for i, (speaker, text) in enumerate(speaker_sums.items()):
-                with cols[i % 2]:
+                name = display_name(speaker)
+                with cols[i % min(len(speaker_sums), 2)]:
                     st.markdown(f"""
                     <div class="summary-card">
-                        <div class="summary-card-title">🗣️ {speaker}</div>
+                        <div class="summary-card-title">🗣️ {name}</div>
                         <div class="summary-card-content">{text}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
-            # Overall English summary
+            # ── Summary Approval (HITL) ──
             st.markdown("""
             <div class="section-header">
-                <span class="section-icon">🌐</span>
-                <p class="section-title">Overall Summary — English</p>
+                <span class="section-icon">✏️</span>
+                <p class="section-title">Review & Approve Summary</p>
                 <div class="section-line"></div>
             </div>
             """, unsafe_allow_html=True)
+            st.caption("Review the AI-generated summaries below. Edit if needed, then approve before publishing.")
 
-            en_text = summary.get("overall_summary_en", "N/A").replace('\n', '<br>')
-            st.markdown(f"""
-            <div class="summary-card">
-                <div class="summary-card-content">{en_text}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Editable English summary
+            st.markdown("**Overall Summary — English**")
+            edited_en = st.text_area(
+                "English Summary",
+                value=summary.get("overall_summary_en", ""),
+                height=150,
+                key="edit_summary_en",
+                label_visibility="collapsed",
+            )
 
-            # Overall Hindi summary
-            st.markdown("""
-            <div class="section-header">
-                <span class="section-icon">🇮🇳</span>
-                <p class="section-title">Overall Summary — हिंदी</p>
-                <div class="section-line"></div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Editable Hindi summary
+            st.markdown("**Overall Summary — हिंदी**")
+            edited_hi = st.text_area(
+                "Hindi Summary",
+                value=summary.get("overall_summary_hi", ""),
+                height=150,
+                key="edit_summary_hi",
+                label_visibility="collapsed",
+            )
 
-            hi_text = summary.get("overall_summary_hi", "N/A").replace('\n', '<br>')
-            st.markdown(f"""
-            <div class="summary-card hindi-card">
-                <div class="summary-card-content">{hi_text}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Approve / Rewrite buttons side by side
+            approve_col, rewrite_col, spacer_col = st.columns([1, 1, 2])
+            with approve_col:
+                approve_btn = st.button("✅ Approve Summary", type="primary", use_container_width=True)
+            with rewrite_col:
+                show_rewrite = st.button("🔄 Rewrite Summary", use_container_width=True)
 
-            # Download buttons
+            # Rewrite section (expandable)
+            if show_rewrite:
+                st.session_state["show_rewrite_ui"] = True
+
+            if st.session_state.get("show_rewrite_ui", False):
+                st.markdown("**🔄 Rewrite with Custom Instructions**")
+                st.caption("Add your instructions below and click Rewrite to regenerate the summary.")
+                rewrite_prompt = st.text_area(
+                    "Custom instructions",
+                    placeholder="e.g. Focus more on action items, keep it shorter, use bullet points...",
+                    height=80,
+                    key="rewrite_prompt_input",
+                    label_visibility="collapsed",
+                )
+                rewrite_go = st.button("🚀 Rewrite Now", type="primary")
+                if rewrite_go:
+                    if not rewrite_prompt.strip():
+                        st.warning("⚠️ Please enter custom instructions.")
+                    else:
+                        with st.spinner("🔄 Rewriting summary with your instructions..."):
+                            try:
+                                # Sync speaker map to backend before rewriting
+                                if smap:
+                                    requests.post(
+                                        f"{API_BASE}/meeting/{meeting_id}/speaker-map",
+                                        json={"speaker_map": smap},
+                                        timeout=5,
+                                    )
+                                params = {
+                                    "force": "true",
+                                    "extra_prompt": rewrite_prompt.strip(),
+                                }
+                                res = requests.post(
+                                    f"{SUMMARIZE_URL}/{meeting_id}",
+                                    params=params,
+                                    timeout=300,
+                                )
+                                if res.status_code != 200:
+                                    st.error(f"❌ Rewrite failed: {res.text}")
+                                else:
+                                    st.session_state["summary_data"] = res.json()
+                                    st.session_state.pop("summary_approved", None)
+                                    st.session_state.pop("show_rewrite_ui", None)
+                                    st.rerun()
+                            except requests.exceptions.ConnectionError:
+                                st.error("❌ Cannot connect to backend.")
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+
+            if approve_btn:
+                # Save edited summaries back
+                summary["overall_summary_en"] = edited_en
+                summary["overall_summary_hi"] = edited_hi
+                st.session_state["summary_data"] = summary
+                st.session_state["summary_approved"] = True
+
+                # Persist to disk via summary.json
+                import pathlib
+                summary_path = pathlib.Path(f"storage/{meeting_id}/summary.json")
+                if summary_path.exists():
+                    try:
+                        with open(summary_path, "w", encoding="utf-8") as f:
+                            json.dump(summary, f, indent=2, ensure_ascii=False)
+                    except Exception:
+                        pass
+                st.success("✅ Summary approved and saved! You can now publish.")
+
+            # ── Publish (only after approval) ──
+            if st.session_state.get("summary_approved", False):
+                st.markdown("""
+                <div class="section-header">
+                    <span class="section-icon">📤</span>
+                    <p class="section-title">Publish & Share</p>
+                    <div class="section-line"></div>
+                </div>
+                """, unsafe_allow_html=True)
+                st.caption("Summary approved. Generate PDF, send via Email, or post to Teams.")
+
+                pub_col1, pub_col2, pub_col3, pub_col4 = st.columns(4)
+
+                with pub_col1:
+                    pdf_btn = st.button("📄 Download PDF", type="primary", use_container_width=True)
+                with pub_col2:
+                    email_btn = st.button("📧 Send Email", use_container_width=True)
+                with pub_col3:
+                    teams_btn = st.button("💬 Send to Teams", use_container_width=True)
+                with pub_col4:
+                    all_btn = st.button("🚀 Publish All", type="primary", use_container_width=True)
+
+                # ── PDF Download ──
+                if pdf_btn:
+                    with st.spinner("Generating PDF..."):
+                        try:
+                            pub_res = requests.post(
+                                f"{API_BASE}/publish/{meeting_id}",
+                                json={"meeting_title": f"Meeting {meeting_id[:8]}"},
+                                timeout=30,
+                            )
+                            if pub_res.status_code == 200:
+                                pdf_dl = requests.get(f"{API_BASE}/publish/{meeting_id}/pdf", timeout=10)
+                                if pdf_dl.status_code == 200:
+                                    st.download_button(
+                                        "⬇️ Click to download PDF",
+                                        data=pdf_dl.content,
+                                        file_name="Meeting_Summary.pdf",
+                                        mime="application/pdf",
+                                        use_container_width=True,
+                                    )
+                                else:
+                                    st.error("PDF download failed.")
+                            else:
+                                st.error(f"PDF generation failed: {pub_res.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                # ── Email ──
+                if email_btn:
+                    with st.spinner("Generating PDF & sending email..."):
+                        try:
+                            pub_res = requests.post(
+                                f"{API_BASE}/publish/{meeting_id}",
+                                json={
+                                    "meeting_title": f"Meeting {meeting_id[:8]}",
+                                    "email_recipients": ["pawanuikey690@gmail.com"],
+                                },
+                                timeout=60,
+                            )
+                            if pub_res.status_code == 200:
+                                result = pub_res.json()
+                                email_ok = result.get("email", {}).get("success")
+                                if email_ok:
+                                    st.success(f"✅ {result['email']['message']}")
+                                else:
+                                    st.warning(f"⚠️ {result['email'].get('message', 'Unknown')}")
+                            else:
+                                st.error(f"Failed: {pub_res.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                # ── Teams ──
+                if teams_btn:
+                    with st.spinner("Sending to Teams..."):
+                        try:
+                            pub_res = requests.post(
+                                f"{API_BASE}/publish/{meeting_id}",
+                                json={"meeting_title": f"Meeting {meeting_id[:8]}"},
+                                timeout=30,
+                            )
+                            if pub_res.status_code == 200:
+                                result = pub_res.json()
+                                teams_ok = result.get("teams", {}).get("success")
+                                if teams_ok:
+                                    st.success(f"✅ {result['teams']['message']}")
+                                else:
+                                    st.warning(f"⚠️ {result['teams'].get('message', 'Unknown')}")
+                            else:
+                                st.error(f"Failed: {pub_res.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                # ── Publish All ──
+                if all_btn:
+                    with st.spinner("Publishing everywhere..."):
+                        try:
+                            pub_res = requests.post(
+                                f"{API_BASE}/publish/{meeting_id}",
+                                json={
+                                    "meeting_title": f"Meeting {meeting_id[:8]}",
+                                    "email_recipients": ["pawanuikey690@gmail.com"],
+                                },
+                                timeout=60,
+                            )
+                            if pub_res.status_code == 200:
+                                result = pub_res.json()
+                                _cols = st.columns(3)
+                                with _cols[0]:
+                                    if result.get("pdf", {}).get("success"):
+                                        st.success("📄 PDF ✅")
+                                    else:
+                                        st.error("📄 PDF ❌")
+                                with _cols[1]:
+                                    if result.get("email", {}).get("success"):
+                                        st.success("📧 Email ✅")
+                                    else:
+                                        st.error("📧 Email ❌")
+                                with _cols[2]:
+                                    if result.get("teams", {}).get("success"):
+                                        st.success("💬 Teams ✅")
+                                    else:
+                                        st.error("💬 Teams ❌")
+
+                                if result.get("pdf", {}).get("success"):
+                                    pdf_dl = requests.get(f"{API_BASE}/publish/{meeting_id}/pdf", timeout=10)
+                                    if pdf_dl.status_code == 200:
+                                        st.download_button(
+                                            "⬇️ Download PDF",
+                                            data=pdf_dl.content,
+                                            file_name="Meeting_Summary.pdf",
+                                            mime="application/pdf",
+                                            use_container_width=True,
+                                        )
+                            else:
+                                st.error(f"Publish failed: {pub_res.text}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+            else:
+                st.info("👆 Review the summaries above and click **Approve Summary** to unlock publishing.")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Download JSON
             dl1, dl2, dl3 = st.columns(3)
             with dl1:
                 st.download_button(

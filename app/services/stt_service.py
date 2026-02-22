@@ -1,21 +1,28 @@
 """
 Speech-to-Text service using WhisperX.
 Handles transcription + speaker diarization in one pass.
-Models are loaded lazily on first use to avoid startup failures.
+
+Uses sequential GPU offloading to fit within limited VRAM (e.g. 4 GB):
+    Load ASR → transcribe → free ASR →
+    Load diarization → diarize → free diarization
 """
 import os
+import gc
 import logging
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+# Recommended by PyTorch for GPUs with limited VRAM
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 
 class AudioTranscriptionService:
     """
     WhisperX transcription with speaker diarization.
     - Auto-detects CUDA GPU (uses float16) or falls back to CPU (int8)
-    - Models loaded lazily on first transcribe() call
+    - Uses sequential GPU offloading: only one model in VRAM at a time
     """
 
     def __init__(self, device=None, compute_type=None):
@@ -31,65 +38,74 @@ class AudioTranscriptionService:
         else:
             self.compute_type = compute_type
 
-        self._asr_model = None
-        self._diarize_model = None
-
         self.hf_token = os.getenv("HF_TOKEN")
         if not self.hf_token:
             raise ValueError("HF_TOKEN not found in environment. Set it in .env")
 
-        logger.info(f"AudioTranscriptionService initialized: device={self.device}, compute_type={self.compute_type}")
+        logger.info(
+            "AudioTranscriptionService initialized: device=%s, compute_type=%s",
+            self.device, self.compute_type,
+        )
 
-    def _load_models(self):
-        """Lazy-load WhisperX and diarization models on first use."""
-        import whisperx
+    # ------------------------------------------------------------------
+    # GPU memory helpers
+    # ------------------------------------------------------------------
+    def _free_gpu(self):
+        """Force-release all unused CUDA memory."""
+        gc.collect()
+        if self.device == "cuda":
+            import torch
+            torch.cuda.empty_cache()
+            logger.info(
+                "CUDA cache cleared – free VRAM: %.1f MiB",
+                torch.cuda.mem_get_info()[0] / 1024 ** 2,
+            )
+
+    # ------------------------------------------------------------------
+    # Model loaders (create-use-delete, never cached)
+    # ------------------------------------------------------------------
+    def _load_diarization_pipeline(self):
+        """Load the first available pyannote diarization model."""
         from whisperx.diarize import DiarizationPipeline
 
-        if self._asr_model is None:
-            logger.info("Loading WhisperX ASR model (base)...")
-            self._asr_model = whisperx.load_model(
-                "base",
-                device=self.device,
-                compute_type=self.compute_type
-            )
-            logger.info("ASR model loaded")
-
-        if self._diarize_model is None:
-            logger.info("Loading diarization pipeline...")
-            # Try models in order of preference
-            models_to_try = [
-                "pyannote/speaker-diarization-3.1",
-                "pyannote/speaker-diarization",
-                "pyannote/speaker-diarization-community-1",
-            ]
-            last_error = None
-            for model_name in models_to_try:
-                try:
-                    logger.info(f"Trying diarization model: {model_name}")
-                    self._diarize_model = DiarizationPipeline(
-                        model_name=model_name,
-                        token=self.hf_token,
-                        device=self.device
-                    )
-                    logger.info(f"Diarization pipeline loaded: {model_name}")
-                    break
-                except Exception as e:
-                    last_error = e
-                    logger.warning(f"Failed to load {model_name}: {e}")
-                    continue
-
-            if self._diarize_model is None:
-                raise RuntimeError(
-                    f"Could not load any diarization model. Last error: {last_error}\n"
-                    "Please accept model licenses at:\n"
-                    "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
-                    "  https://huggingface.co/pyannote/segmentation-3.0\n"
-                    "  https://huggingface.co/pyannote/speaker-diarization-community-1"
+        models_to_try = [
+            "pyannote/speaker-diarization-3.1",
+            "pyannote/speaker-diarization",
+            "pyannote/speaker-diarization-community-1",
+        ]
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                logger.info("Trying diarization model: %s", model_name)
+                pipeline = DiarizationPipeline(
+                    model_name=model_name,
+                    token=self.hf_token,
+                    device=self.device,
                 )
+                logger.info("Diarization pipeline loaded: %s", model_name)
+                return pipeline
+            except Exception as e:
+                last_error = e
+                logger.warning("Failed to load %s: %s", model_name, e)
+                continue
 
+        raise RuntimeError(
+            f"Could not load any diarization model. Last error: {last_error}\n"
+            "Please accept model licenses at:\n"
+            "  https://huggingface.co/pyannote/speaker-diarization-3.1\n"
+            "  https://huggingface.co/pyannote/segmentation-3.0\n"
+            "  https://huggingface.co/pyannote/speaker-diarization-community-1"
+        )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
     def transcribe(self, audio_path: str) -> dict:
         """
         Transcribe audio and assign speaker labels.
+
+        Uses sequential GPU offloading so only one model sits in VRAM
+        at a time, allowing operation on GPUs with as little as 4 GB.
 
         Args:
             audio_path: Path to WAV audio file
@@ -100,36 +116,52 @@ class AudioTranscriptionService:
         """
         import whisperx
 
-        # Ensure models are loaded
-        self._load_models()
-
-        logger.info(f"Loading audio: {audio_path}")
+        logger.info("Loading audio: %s", audio_path)
         audio = whisperx.load_audio(audio_path)
 
-        # 1. Transcribe
+        # ── Step 1: ASR (load → transcribe → free) ──────────────────
+        logger.info("Loading WhisperX ASR model (base)...")
+        asr_model = whisperx.load_model(
+            "base",
+            device=self.device,
+            compute_type=self.compute_type,
+        )
+
         logger.info("Running transcription...")
-        result = self._asr_model.transcribe(audio)
-        logger.info(f"Transcription done: {len(result.get('segments', []))} raw segments")
+        result = asr_model.transcribe(audio)
+        logger.info(
+            "Transcription done: %d raw segments",
+            len(result.get("segments", [])),
+        )
 
-        # 2. Diarization — pass the audio FILE PATH
+        del asr_model  # release ASR model from VRAM
+        self._free_gpu()
+
+        # ── Step 2: Diarization (load → diarize → free) ─────────────
+        logger.info("Loading diarization pipeline...")
+        diarize_model = self._load_diarization_pipeline()
+
         logger.info("Running speaker diarization...")
-        diarization = self._diarize_model(audio_path)
+        diarization = diarize_model(audio_path)
 
-        # 3. Assign speaker labels to segments
+        del diarize_model  # release diarization model from VRAM
+        self._free_gpu()
+
+        # ── Step 3: Merge speakers into transcript (CPU only) ───────
         result = whisperx.assign_word_speakers(diarization, result)
 
-        # 4. Normalize output
+        # ── Step 4: Normalize output ────────────────────────────────
         segments = []
         for seg in result.get("segments", []):
             segments.append({
                 "start": round(seg.get("start", 0.0), 2),
                 "end": round(seg.get("end", 0.0), 2),
                 "speaker": seg.get("speaker", "UNKNOWN"),
-                "text": seg.get("text", "").strip()
+                "text": seg.get("text", "").strip(),
             })
 
-        logger.info(f"Final output: {len(segments)} segments with speaker labels")
+        logger.info("Final output: %d segments with speaker labels", len(segments))
         return {
             "language": result.get("language", "unknown"),
-            "segments": segments
+            "segments": segments,
         }

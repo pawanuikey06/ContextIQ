@@ -20,6 +20,7 @@
         ChevronDown,
         Shield,
         ShieldCheck,
+        ArrowUpRight,
     } from "lucide-svelte";
     import { api, get, post, put } from "../lib/api.js";
     import { shortId } from "../lib/utils.js";
@@ -43,6 +44,7 @@
     // Editing state
     let editingIndex = -1;
     let editDraft = {};
+    let activeSection = null;
 
     const statusOptions = ["To Do", "In Progress", "In Review", "Done"];
     const priorityOptions = ["High", "Medium", "Low"];
@@ -452,328 +454,469 @@
             </div>
         </div>
 
-        <!-- Action Items (Jira-style) -->
-        {#if actionData.action_items?.length}
-            <div class="mb-8">
-                <div class="flex items-center justify-between mb-4">
-                    <p
-                        class="text-emerald-600 text-xs font-bold uppercase tracking-[0.15em]"
-                    >
-                        Action Items
-                    </p>
-                </div>
+        <!-- Section cards grid -->
+        {@const sections = [
+            {
+                id: "actions",
+                label: "Action Items",
+                icon: CheckCircle,
+                color: "text-blue-600",
+                bg: "bg-blue-50",
+                border: "border-blue-100",
+                count: actionData.action_items?.length || 0,
+                desc: "Tasks, assignments, and deadlines extracted from the meeting.",
+            },
+            {
+                id: "decisions",
+                label: "Decisions Made",
+                icon: ShieldCheck,
+                color: "text-emerald-600",
+                bg: "bg-emerald-50",
+                border: "border-emerald-100",
+                count: actionData.decisions?.length || 0,
+                desc: "Key decisions and resolutions agreed upon during discussion.",
+            },
+            {
+                id: "takeaways",
+                label: "Key Takeaways",
+                icon: Lightbulb,
+                color: "text-amber-600",
+                bg: "bg-amber-50",
+                border: "border-amber-100",
+                count: actionData.key_takeaways?.length || 0,
+                desc: "Important insights and highlights from the meeting.",
+            },
+            {
+                id: "followups",
+                label: "Follow-ups",
+                icon: RotateCcw,
+                color: "text-purple-600",
+                bg: "bg-purple-50",
+                border: "border-purple-100",
+                count: actionData.follow_ups?.length || 0,
+                desc: "Pending follow-up items that need attention.",
+            },
+        ]}
 
-                <!-- Table header -->
-                <div
-                    class="hidden md:grid md:grid-cols-12 gap-3 px-5 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider"
-                >
-                    <div class="col-span-4">Task</div>
-                    <div class="col-span-2">Assignee</div>
-                    <div class="col-span-2">Priority</div>
-                    <div class="col-span-2">Status</div>
-                    <div class="col-span-1">Jira ID</div>
-                    <div class="col-span-1"></div>
-                </div>
-
-                <div class="space-y-2">
-                    {#each actionData.action_items as item, idx}
-                        {@const p = getPriority(item.priority)}
-
-                        {#if editingIndex === idx}
-                            <!-- Edit mode -->
+        {#if !activeSection}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {#each sections as sec}
+                    {#if sec.count > 0}
+                        <button
+                            class="bg-white rounded-2xl border {sec.border} shadow-sm p-6 text-left hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group"
+                            on:click={() => (activeSection = sec.id)}
+                        >
                             <div
-                                class="bg-white rounded-2xl border-2 border-emerald-200 shadow-lg p-5 space-y-4"
+                                class="w-10 h-10 rounded-xl {sec.bg} flex items-center justify-center mb-4"
                             >
-                                <div>
-                                    <span
-                                        class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
-                                        >Task</span
-                                    >
-                                    <input
-                                        type="text"
-                                        bind:value={editDraft.task}
-                                        class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                                    />
-                                </div>
-                                <div
-                                    class="grid grid-cols-2 md:grid-cols-4 gap-3"
-                                >
-                                    <div>
-                                        <span
-                                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
-                                            >Assignee</span
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={editDraft.assigned_to}
-                                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <span
-                                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
-                                            >Priority</span
-                                        >
-                                        <select
-                                            bind:value={editDraft.priority}
-                                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                                        >
-                                            {#each priorityOptions as opt}<option
-                                                    value={opt}>{opt}</option
-                                                >{/each}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <span
-                                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
-                                            >Status</span
-                                        >
-                                        <select
-                                            bind:value={editDraft.status}
-                                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                                        >
-                                            {#each statusOptions as opt}<option
-                                                    value={opt}>{opt}</option
-                                                >{/each}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <span
-                                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
-                                            >Jira ID</span
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={editDraft.jira_id}
-                                            placeholder="PROJ-123"
-                                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <span
-                                        class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
-                                        >Deadline</span
-                                    >
-                                    <input
-                                        type="date"
-                                        bind:value={editDraft.deadline}
-                                        class="w-full max-w-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                                    />
-                                </div>
-                                <div class="flex gap-2 pt-1">
-                                    <button
-                                        on:click={saveEdit}
-                                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg text-sm inline-flex items-center gap-1.5 transition-colors"
-                                    >
-                                        <Save size={13} /> Save
-                                    </button>
-                                    <button
-                                        on:click={cancelEdit}
-                                        class="bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium px-4 py-2 rounded-lg text-sm inline-flex items-center gap-1.5 transition-colors"
-                                    >
-                                        <X size={13} /> Cancel
-                                    </button>
-                                </div>
+                                <svelte:component
+                                    this={sec.icon}
+                                    size={20}
+                                    class={sec.color}
+                                />
                             </div>
-                        {:else}
-                            <!-- View mode (Jira row) -->
+                            <h3
+                                class="text-sm font-bold text-gray-900 mb-1 flex items-center gap-2"
+                            >
+                                {sec.label}
+                                <span
+                                    class="text-[10px] font-semibold {sec.color} {sec.bg} px-2 py-0.5 rounded-full"
+                                    >{sec.count}</span
+                                >
+                            </h3>
+                            <p
+                                class="text-xs text-gray-400 mb-3 leading-relaxed"
+                            >
+                                {sec.desc}
+                            </p>
+                            <span
+                                class="text-xs font-semibold {sec.color} group-hover:underline inline-flex items-center gap-1"
+                            >
+                                Explore <ArrowUpRight size={12} />
+                            </span>
+                        </button>
+                    {/if}
+                {/each}
+            </div>
+        {:else}
+            <!-- Back button -->
+            <button
+                class="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 mb-6 transition-colors"
+                on:click={() => (activeSection = null)}
+            >
+                <ChevronDown size={14} class="rotate-90" /> Back to overview
+            </button>
+
+            <!-- ACTION ITEMS SECTION -->
+            {#if activeSection === "actions" && actionData.action_items?.length}
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
                             <div
-                                class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5 hover:shadow-md transition-shadow group"
+                                class="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center"
+                            >
+                                <CheckCircle size={16} class="text-blue-600" />
+                            </div>
+                            <h3 class="text-sm font-bold text-gray-900">
+                                Action Items
+                            </h3>
+                        </div>
+                    </div>
+
+                    <!-- Progress bar -->
+                    {#if totalActions > 0}
+                        {@const doneCount = (
+                            actionData?.action_items || []
+                        ).filter((i) => i.status === "Done").length}
+                        {@const pct = Math.round(
+                            (doneCount / totalActions) * 100,
+                        )}
+                        <div class="mb-6">
+                            <div class="flex items-center justify-between mb-2">
+                                <span
+                                    class="text-xs font-semibold text-gray-500"
+                                    >Completion</span
+                                >
+                                <span class="text-xs font-bold text-emerald-600"
+                                    >{doneCount}/{totalActions} done ({pct}%)</span
+                                >
+                            </div>
+                            <div
+                                class="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden"
                             >
                                 <div
-                                    class="md:grid md:grid-cols-12 gap-3 items-center"
+                                    class="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full rounded-full transition-all duration-500"
+                                    style="width: {pct}%"
+                                ></div>
+                            </div>
+                        </div>
+                    {/if}
+
+                    <div class="space-y-3">
+                        {#each actionData.action_items as item, idx}
+                            {@const p = getPriority(item.priority)}
+
+                            {#if editingIndex === idx}
+                                <!-- Edit mode -->
+                                <div
+                                    class="bg-white rounded-2xl border-2 border-emerald-200 shadow-lg p-5 space-y-4"
                                 >
-                                    <!-- Task -->
-                                    <div
-                                        class="col-span-4 flex items-start gap-3 mb-2 md:mb-0"
-                                    >
-                                        <div
-                                            class="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 {p.dot}"
-                                        ></div>
-                                        <p
-                                            class="text-sm font-semibold text-gray-900 leading-snug"
+                                    <div>
+                                        <span
+                                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
+                                            >Task</span
                                         >
-                                            {item.task || "Untitled"}
-                                        </p>
+                                        <input
+                                            type="text"
+                                            bind:value={editDraft.task}
+                                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                        />
                                     </div>
-                                    <!-- Assignee -->
                                     <div
-                                        class="col-span-2 flex items-center gap-1.5 mb-2 md:mb-0"
+                                        class="grid grid-cols-2 md:grid-cols-4 gap-3"
                                     >
-                                        <div
-                                            class="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0"
-                                        >
-                                            <User
-                                                size={11}
-                                                class="text-gray-400"
+                                        <div>
+                                            <span
+                                                class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
+                                                >Assignee</span
+                                            >
+                                            <input
+                                                type="text"
+                                                bind:value={
+                                                    editDraft.assigned_to
+                                                }
+                                                class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                                             />
                                         </div>
-                                        <span
-                                            class="text-xs text-gray-600 truncate"
-                                            >{item.assigned_to ||
-                                                "Unassigned"}</span
-                                        >
-                                    </div>
-                                    <!-- Priority -->
-                                    <div class="col-span-2 mb-2 md:mb-0">
-                                        <span
-                                            class="text-[10px] font-semibold px-2.5 py-1 rounded-full border {p.color}"
-                                            >{p.label}</span
-                                        >
-                                    </div>
-                                    <!-- Status -->
-                                    <div class="col-span-2 mb-2 md:mb-0">
-                                        <select
-                                            value={item.status || "To Do"}
-                                            on:change={(e) =>
-                                                updateItemStatus(
-                                                    idx,
-                                                    /** @type {HTMLSelectElement} */ (
-                                                        e.target
-                                                    ).value,
-                                                )}
-                                            class="text-[11px] font-semibold px-2.5 py-1 rounded-full border appearance-none cursor-pointer {getStatusColor(
-                                                item.status,
-                                            )}"
-                                        >
-                                            {#each statusOptions as s}<option
-                                                    value={s}>{s}</option
-                                                >{/each}
-                                        </select>
-                                    </div>
-                                    <!-- Jira ID -->
-                                    <div class="col-span-1 mb-2 md:mb-0">
-                                        {#if item.jira_id}
+                                        <div>
                                             <span
-                                                class="text-[11px] font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded"
-                                                >{item.jira_id}</span
+                                                class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
+                                                >Priority</span
                                             >
-                                        {:else}
+                                            <select
+                                                bind:value={editDraft.priority}
+                                                class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                            >
+                                                {#each priorityOptions as pr}<option
+                                                        value={pr}>{pr}</option
+                                                    >{/each}
+                                            </select>
+                                        </div>
+                                        <div>
                                             <span
-                                                class="text-[10px] text-gray-300"
-                                                >—</span
+                                                class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
+                                                >Status</span
                                             >
-                                        {/if}
+                                            <select
+                                                bind:value={editDraft.status}
+                                                class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                            >
+                                                {#each statusOptions as st}<option
+                                                        value={st}>{st}</option
+                                                    >{/each}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <span
+                                                class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
+                                                >Jira ID</span
+                                            >
+                                            <input
+                                                type="text"
+                                                bind:value={editDraft.jira_id}
+                                                placeholder="PROJ-123"
+                                                class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                            />
+                                        </div>
                                     </div>
-                                    <!-- Edit button -->
-                                    <div class="col-span-1 flex justify-end">
+                                    <div>
+                                        <span
+                                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1"
+                                            >Deadline</span
+                                        >
+                                        <input
+                                            type="date"
+                                            bind:value={editDraft.deadline}
+                                            class="w-full max-w-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                        />
+                                    </div>
+                                    <div class="flex gap-2 pt-1">
                                         <button
-                                            on:click={() => startEdit(idx)}
-                                            class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50"
+                                            on:click={saveEdit}
+                                            class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg text-sm inline-flex items-center gap-1.5 transition-colors"
                                         >
-                                            <Pencil size={13} />
+                                            <Save size={13} /> Save
+                                        </button>
+                                        <button
+                                            on:click={cancelEdit}
+                                            class="bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium px-4 py-2 rounded-lg text-sm inline-flex items-center gap-1.5 transition-colors"
+                                        >
+                                            <X size={13} /> Cancel
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Deadline row -->
-                                {#if item.deadline}
-                                    <div
-                                        class="mt-2 ml-5 flex items-center gap-1.5 text-[11px] text-gray-400"
-                                    >
-                                        <Calendar size={10} />
-                                        {formatDeadlineDisplay(item.deadline)}
+                            {:else}
+                                <!-- Card view -->
+                                <div
+                                    class="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 group overflow-hidden"
+                                >
+                                    <div class="flex">
+                                        <div
+                                            class="w-1.5 flex-shrink-0 rounded-l-2xl {p.dot}"
+                                        ></div>
+                                        <div class="flex-1 p-5">
+                                            <div
+                                                class="flex items-start justify-between gap-3 mb-3"
+                                            >
+                                                <div
+                                                    class="flex items-start gap-3 flex-1 min-w-0"
+                                                >
+                                                    <div
+                                                        class="w-8 h-8 rounded-xl {p.color.split(
+                                                            ' ',
+                                                        )[1]} flex items-center justify-center flex-shrink-0 mt-0.5"
+                                                    >
+                                                        <CheckCircle
+                                                            size={15}
+                                                            class={p.color.split(
+                                                                " ",
+                                                            )[0]}
+                                                        />
+                                                    </div>
+                                                    <div class="min-w-0">
+                                                        <p
+                                                            class="text-sm font-semibold text-gray-900 leading-snug"
+                                                        >
+                                                            {item.task ||
+                                                                "Untitled"}
+                                                        </p>
+                                                        {#if item.deadline}
+                                                            <span
+                                                                class="inline-flex items-center gap-1 text-[10px] text-gray-400 mt-1"
+                                                            >
+                                                                <Calendar
+                                                                    size={10}
+                                                                />
+                                                                {formatDeadlineDisplay(
+                                                                    item.deadline,
+                                                                )}
+                                                            </span>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    on:click={() =>
+                                                        startEdit(idx)}
+                                                    class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50"
+                                                >
+                                                    <Pencil size={13} />
+                                                </button>
+                                            </div>
+                                            <div
+                                                class="flex flex-wrap items-center gap-2"
+                                            >
+                                                <span
+                                                    class="inline-flex items-center gap-1.5 text-[11px] text-gray-500 bg-gray-50 px-2.5 py-1 rounded-lg"
+                                                >
+                                                    <User
+                                                        size={11}
+                                                        class="text-gray-400"
+                                                    />
+                                                    {item.assigned_to ||
+                                                        "Unassigned"}
+                                                </span>
+                                                <span
+                                                    class="text-[10px] font-semibold px-2.5 py-1 rounded-lg border {p.color}"
+                                                    >{p.label}</span
+                                                >
+                                                <select
+                                                    value={item.status ||
+                                                        "To Do"}
+                                                    on:change={(e) =>
+                                                        updateItemStatus(
+                                                            idx,
+                                                            /** @type {HTMLSelectElement} */ (
+                                                                e.target
+                                                            ).value,
+                                                        )}
+                                                    class="text-[10px] font-semibold px-2.5 py-1 rounded-lg border appearance-none cursor-pointer {getStatusColor(
+                                                        item.status,
+                                                    )}"
+                                                >
+                                                    {#each statusOptions as s}<option
+                                                            value={s}
+                                                            >{s}</option
+                                                        >{/each}
+                                                </select>
+                                                {#if item.jira_id}
+                                                    <span
+                                                        class="text-[10px] font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded-lg"
+                                                        >{item.jira_id}</span
+                                                    >
+                                                {/if}
+                                            </div>
+                                        </div>
                                     </div>
-                                {/if}
-                            </div>
-                        {/if}
-                    {/each}
+                                </div>
+                            {/if}
+                        {/each}
+                    </div>
                 </div>
-            </div>
-        {/if}
+            {/if}
 
-        <!-- Decisions -->
-        {#if actionData.decisions?.length}
-            <div class="mb-8">
-                <p
-                    class="text-emerald-600 text-xs font-bold uppercase tracking-[0.15em] mb-4"
-                >
-                    Decisions Made
-                </p>
-                <div class="grid md:grid-cols-2 gap-3">
-                    {#each actionData.decisions as d}
+            <!-- DECISIONS SECTION -->
+            {#if activeSection === "decisions" && actionData.decisions?.length}
+                <div>
+                    <div class="flex items-center gap-2 mb-4">
                         <div
-                            class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
+                            class="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center"
                         >
-                            <p
-                                class="text-sm font-semibold text-gray-900 flex items-start gap-2"
-                            >
-                                <CheckCircle2
-                                    size={14}
-                                    class="text-emerald-600 mt-0.5 flex-shrink-0"
-                                />
-                                {d.decision || "N/A"}
-                            </p>
-                            <div
-                                class="text-[11px] text-gray-400 mt-2 ml-5 space-y-0.5"
-                            >
-                                <p>
-                                    <span class="font-medium text-gray-500"
-                                        >By:</span
-                                    >
-                                    {d.made_by || "Unknown"}
-                                </p>
-                                <p>
-                                    <span class="font-medium text-gray-500"
-                                        >Context:</span
-                                    >
-                                    {d.context || "N/A"}
-                                </p>
-                            </div>
+                            <ShieldCheck size={16} class="text-emerald-600" />
                         </div>
-                    {/each}
+                        <h3 class="text-sm font-bold text-gray-900">
+                            Decisions Made
+                        </h3>
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-3">
+                        {#each actionData.decisions as d}
+                            <div
+                                class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-all"
+                            >
+                                <p
+                                    class="text-sm font-semibold text-gray-900 flex items-start gap-2"
+                                >
+                                    <CheckCircle2
+                                        size={14}
+                                        class="text-emerald-600 mt-0.5 flex-shrink-0"
+                                    />
+                                    {d.decision || "N/A"}
+                                </p>
+                                <div
+                                    class="text-[11px] text-gray-400 mt-2 ml-5 space-y-0.5"
+                                >
+                                    <p>
+                                        <span class="font-medium text-gray-500"
+                                            >By:</span
+                                        >
+                                        {d.made_by || "Unknown"}
+                                    </p>
+                                    <p>
+                                        <span class="font-medium text-gray-500"
+                                            >Context:</span
+                                        >
+                                        {d.context || "N/A"}
+                                    </p>
+                                </div>
+                            </div>
+                        {/each}
+                    </div>
                 </div>
-            </div>
-        {/if}
+            {/if}
 
-        <!-- Key Takeaways + Follow-ups -->
-        <div class="grid md:grid-cols-2 gap-4 mb-8">
-            {#if actionData.key_takeaways?.length}
-                <div
-                    class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
-                >
-                    <p
-                        class="text-emerald-600 text-[10px] font-bold uppercase tracking-[0.15em] mb-3 flex items-center gap-1.5"
+            <!-- KEY TAKEAWAYS SECTION -->
+            {#if activeSection === "takeaways" && actionData.key_takeaways?.length}
+                <div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div
+                            class="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center"
+                        >
+                            <Lightbulb size={16} class="text-amber-600" />
+                        </div>
+                        <h3 class="text-sm font-bold text-gray-900">
+                            Key Takeaways
+                        </h3>
+                    </div>
+                    <div
+                        class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
                     >
-                        <Lightbulb size={12} class="text-amber-500" /> Key Takeaways
-                    </p>
-                    <ul class="space-y-2">
-                        {#each actionData.key_takeaways as t}
-                            <li
-                                class="text-sm text-gray-600 flex items-start gap-2"
-                            >
-                                <span class="text-emerald-500 mt-1 text-[8px]"
-                                    >●</span
+                        <ul class="space-y-2">
+                            {#each actionData.key_takeaways as t}
+                                <li
+                                    class="text-sm text-gray-600 flex items-start gap-2"
                                 >
-                                {t}
-                            </li>
-                        {/each}
-                    </ul>
+                                    <span class="text-amber-500 mt-1 text-[8px]"
+                                        >●</span
+                                    >
+                                    {t}
+                                </li>
+                            {/each}
+                        </ul>
+                    </div>
                 </div>
             {/if}
-            {#if actionData.follow_ups?.length}
-                <div
-                    class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
-                >
-                    <p
-                        class="text-emerald-600 text-[10px] font-bold uppercase tracking-[0.15em] mb-3 flex items-center gap-1.5"
+
+            <!-- FOLLOW-UPS SECTION -->
+            {#if activeSection === "followups" && actionData.follow_ups?.length}
+                <div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div
+                            class="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center"
+                        >
+                            <RotateCcw size={16} class="text-purple-600" />
+                        </div>
+                        <h3 class="text-sm font-bold text-gray-900">
+                            Follow-ups
+                        </h3>
+                    </div>
+                    <div
+                        class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
                     >
-                        <RotateCcw size={12} class="text-blue-500" /> Follow-ups
-                    </p>
-                    <ul class="space-y-2">
-                        {#each actionData.follow_ups as f}
-                            <li
-                                class="text-sm text-gray-600 flex items-start gap-2"
-                            >
-                                <span class="text-blue-500 mt-1 text-[8px]"
-                                    >●</span
+                        <ul class="space-y-2">
+                            {#each actionData.follow_ups as f}
+                                <li
+                                    class="text-sm text-gray-600 flex items-start gap-2"
                                 >
-                                {f}
-                            </li>
-                        {/each}
-                    </ul>
+                                    <span
+                                        class="text-purple-500 mt-1 text-[8px]"
+                                        >●</span
+                                    >
+                                    {f}
+                                </li>
+                            {/each}
+                        </ul>
+                    </div>
                 </div>
             {/if}
-        </div>
+        {/if}
     {/if}
 </div>

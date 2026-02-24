@@ -95,7 +95,15 @@
                 body: formData,
             });
             const uploadData = await uploadRes.json();
+            if (!uploadRes.ok) {
+                throw new Error(
+                    uploadData.detail || `Upload failed (${uploadRes.status})`,
+                );
+            }
             const meetingId = uploadData.meeting_id;
+            if (!meetingId) {
+                throw new Error("Server did not return a meeting ID");
+            }
 
             uploadProgress =
                 "Transcribing & diarizing (this may take a few minutes)...";

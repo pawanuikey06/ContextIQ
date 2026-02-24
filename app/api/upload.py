@@ -67,19 +67,28 @@ async def upload_video(file: UploadFile = File(...)):
     if file_hash in hash_registry:
         existing_id = hash_registry[file_hash]
         audio_path = AUDIO_DIR / f"{existing_id}.wav"
-        logger.info(
-            "Duplicate detected! hash=%s → existing meeting_id=%s",
-            file_hash[:16], existing_id
-        )
-        return UploadResponse(
-            meeting_id=existing_id,
-            audio_path=str(audio_path),
-            message=f"Duplicate file detected. Returning existing meeting: {existing_id}"
-        )
+        if audio_path.exists():
+            logger.info(
+                "Duplicate detected! hash=%s → existing meeting_id=%s",
+                file_hash[:16], existing_id
+            )
+            return UploadResponse(
+                meeting_id=existing_id,
+                audio_path=str(audio_path),
+                message=f"Duplicate file detected. Returning existing meeting: {existing_id}"
+            )
+        else:
+            logger.warning(
+                "Duplicate hash found but audio missing for %s. Re-extracting.",
+                existing_id
+            )
 
-    # ── New file: process normally ──
-    meeting_id = str(uuid.uuid4())
-    logger.info("[%s] New upload: %s (hash=%s)", meeting_id, file.filename, file_hash[:16])
+    # ── New file (or re-extract for missing audio) ──
+    # Reuse existing meeting_id if hash was seen before (audio was deleted)
+    meeting_id = hash_registry.get(file_hash) or str(uuid.uuid4())
+    logger.info("[%s] %s: %s (hash=%s)", meeting_id,
+                "Re-extracting audio" if file_hash in hash_registry else "New upload",
+                file.filename, file_hash[:16])
 
     temp_video_path = AUDIO_DIR / f"{meeting_id}_temp.mp4"
     audio_path = AUDIO_DIR / f"{meeting_id}.wav"

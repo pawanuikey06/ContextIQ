@@ -26,6 +26,10 @@ logging.basicConfig(
 
 app = FastAPI(title="Meeting Intelligence System", version="2.0.0")
 
+# Ensure required directories exist at startup
+for d in ["data/audio", "storage"]:
+    Path(d).mkdir(parents=True, exist_ok=True)
+
 # CORS — allow Svelte frontend to call the API
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -62,6 +66,7 @@ async def root():
         "endpoints": [
             "POST /upload-video",
             "POST /transcribe/{meeting_id}",
+            "GET  /meetings",
             "GET  /meeting/{meeting_id}",
             "PUT  /meeting/{meeting_id}/segments/{index}",
             "GET  /meeting/{meeting_id}/metadata",
@@ -69,6 +74,7 @@ async def root():
             "POST /summarize/{meeting_id}",
             "POST /publish/{meeting_id}",
             "GET  /publish/{meeting_id}/pdf",
+            "GET  /publish/{meeting_id}/full-report",
             "POST /chat/ask",
             "POST /chat/ask/stream",
             "POST /chat/index/{meeting_id}",
@@ -77,8 +83,16 @@ async def root():
             "POST /meeting/{meeting_id}/speaker-map",
             "GET  /meeting/{meeting_id}/speaker-map",
             "POST /meeting/{meeting_id}/action-items",
+            "PUT  /meeting/{meeting_id}/action-items",
             "POST /meeting/{meeting_id}/auto-title",
             "POST /meeting/{meeting_id}/followup-email",
+            "POST /meeting/{meeting_id}/requirements",
+            "POST /meeting/{meeting_id}/documentation",
+            "POST /meeting/{meeting_id}/sentiment",
+            "GET  /meeting/{meeting_id}/subtitles/srt",
+            "GET  /meeting/{meeting_id}/subtitles/vtt",
+            "GET  /search?q=keyword",
+            "GET  /stats",
             "GET  /health",
         ]
     }

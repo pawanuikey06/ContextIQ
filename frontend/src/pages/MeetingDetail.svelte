@@ -659,7 +659,9 @@
                                         <span
                                             class="text-[10px] text-txt-faint font-mono bg-surface-50 px-1.5 py-0.5 rounded"
                                         >
-                                            {formatTime(seg.start)}
+                                            {formatTime(seg.start)} – {formatTime(
+                                                seg.end,
+                                            )}
                                         </span>
                                     </div>
                                     <!-- Text content -->
@@ -680,13 +682,6 @@
                                         {/if}
                                     {/each}
                                 </div>
-
-                                <!-- Hover timestamp -->
-                                <span
-                                    class="text-[10px] text-txt-faint font-mono mt-1 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
-                                >
-                                    {formatTime(seg.start)}
-                                </span>
                             </div>
                         </div>
                     {/if}
@@ -728,7 +723,9 @@
                                 >
                                     <span
                                         class="text-[10px] font-mono text-txt-faint"
-                                        >{formatTime(s.start)}</span
+                                        >{formatTime(s.start)} – {formatTime(
+                                            s.end,
+                                        )}</span
                                     >
                                     <p
                                         class="text-[13px] text-txt-secondary mt-0.5 leading-relaxed"
@@ -773,7 +770,9 @@
                             >
                                 <td
                                     class="px-4 py-2.5 text-[11px] text-txt-faint font-mono align-top"
-                                    >{formatTime(seg.start)}</td
+                                    >{formatTime(seg.start)} – {formatTime(
+                                        seg.end,
+                                    )}</td
                                 >
                                 <td class="px-4 py-2.5 align-top">
                                     <span
@@ -1641,15 +1640,16 @@
                                         style="height: {normalizedHeight}%; background-color: {sentimentColor(
                                             seg.sentiment,
                                         )}; min-width: 2px;"
-                                        title="{seg.speaker}: {seg.emotion} ({seg.score >
-                                        0
+                                        title="{displayName(
+                                            seg.speaker,
+                                        )}: {seg.emotion} ({seg.score > 0
                                             ? '+'
                                             : ''}{seg.score})"
                                     >
                                         <div
                                             class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-gray-900 text-white text-[10px] rounded px-2 py-1 whitespace-nowrap z-10"
                                         >
-                                            {seg.speaker}: {seg.emotion}
+                                            {displayName(seg.speaker)}: {seg.emotion}
                                         </div>
                                     </div>
                                 {/each}
@@ -1736,8 +1736,10 @@
                                         )}"
                                     ></div>
                                     <span
-                                        class="text-[11px] font-mono text-txt-faint w-12 flex-shrink-0"
-                                        >{formatTime(seg.start)}</span
+                                        class="text-[11px] font-mono text-txt-faint w-20 flex-shrink-0"
+                                        >{formatTime(seg.start)} – {formatTime(
+                                            seg.end,
+                                        )}</span
                                     >
                                     <span
                                         class="text-[12px] font-semibold text-txt-primary w-28 flex-shrink-0 truncate"

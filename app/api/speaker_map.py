@@ -32,6 +32,18 @@ async def save_speaker_map(meeting_id: str, body: SpeakerMapRequest):
         json.dump(body.speaker_map, f, indent=2, ensure_ascii=False)
 
     logger.info("[%s] Speaker map saved: %s", meeting_id, body.speaker_map)
+
+    # Auto-reindex in RAG so chat uses mapped names
+    try:
+        from app.services.rag_service import MeetingRAGService
+        rag = MeetingRAGService()
+        transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
+        if transcript_path.exists():
+            count = rag.ingest_meeting(meeting_id)
+            logger.info("[%s] Auto-reindexed with speaker names: %d chunks", meeting_id, count)
+    except Exception as e:
+        logger.warning("[%s] Auto-reindex after speaker map failed: %s", meeting_id, e)
+
     return {"success": True, "speaker_map": body.speaker_map}
 
 

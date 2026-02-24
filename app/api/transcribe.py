@@ -110,6 +110,15 @@ async def transcribe_meeting(meeting_id: str):
         except Exception as e:
             logger.warning(f"[{meeting_id}] Auto-index failed (non-fatal): {e}")
 
+        # Step 4b: Auto-generate meeting title from transcript
+        try:
+            from app.services.insights_service import MeetingInsightsService
+            insights = MeetingInsightsService()
+            title_result = insights.generate_title(meeting_id, force=False)
+            logger.info(f"[{meeting_id}] Auto-title generated: {title_result.get('auto_title', 'N/A')}")
+        except Exception as e:
+            logger.warning(f"[{meeting_id}] Auto-title failed (non-fatal): {e}")
+
     except Exception as e:
         logger.error(f"[{meeting_id}] Transcription failed: {e}")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")

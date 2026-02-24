@@ -7,6 +7,8 @@
         Database,
         ChevronDown,
         Sparkles,
+        Bot,
+        User,
     } from "lucide-svelte";
     import { api, get, post } from "../lib/api.js";
     import { shortId, formatTime } from "../lib/utils.js";
@@ -45,10 +47,17 @@
     async function indexAllMeetings() {
         indexingAll = true;
         try {
-            const res = await get(api.chat.meetings);
-            const existing = res.indexed_meetings || [];
-            for (const mid of existing) {
-                await post(api.chat.index(mid), null, 30000);
+            // Get all meetings
+            const allRes = await get(api.meetings);
+            const allMeetings = (allRes.meetings || []).map((m) => m.id);
+            // Get already indexed
+            const idxRes = await get(api.chat.meetings);
+            const alreadyIndexed = new Set(idxRes.indexed_meetings || []);
+            // Index only un-indexed meetings
+            for (const mid of allMeetings) {
+                if (!alreadyIndexed.has(mid)) {
+                    await post(api.chat.index(mid), null, 30000);
+                }
             }
             await loadIndexedMeetings();
         } catch (err) {
@@ -267,15 +276,25 @@
                 <div class="max-w-2xl mx-auto space-y-4">
                     {#each messages as msg}
                         {#if msg.role === "user"}
-                            <div class="flex justify-end">
+                            <div class="flex justify-end gap-2.5">
                                 <div
                                     class="bg-brand-600 text-white px-4 py-2.5 rounded-2xl rounded-br-md max-w-md text-sm shadow-sm"
                                 >
                                     {msg.content}
                                 </div>
+                                <div
+                                    class="w-8 h-8 rounded-full bg-emerald-700 flex items-center justify-center flex-shrink-0 mt-1 shadow-sm"
+                                >
+                                    <User size={14} class="text-white" />
+                                </div>
                             </div>
                         {:else}
-                            <div class="flex justify-start">
+                            <div class="flex justify-start gap-2.5">
+                                <div
+                                    class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 mt-1 shadow-sm"
+                                >
+                                    <Bot size={14} class="text-emerald-400" />
+                                </div>
                                 <div class="card max-w-lg !shadow-sm">
                                     <p
                                         class="text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap"

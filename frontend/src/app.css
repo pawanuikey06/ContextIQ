@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-50 text-txt-primary font-sans antialiased;
+  }
+}
+
+@layer components {
+
+  /* ── Cards ── */
+  .stat-card {
+    @apply bg-white rounded-2xl p-5 flex flex-col items-start gap-2 shadow-sm border border-surface-200 transition-all hover:shadow-md;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl p-5 shadow-sm border border-surface-200;
+  }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    @apply bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-xl transition-all inline-flex items-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply bg-white border border-surface-200 hover:bg-surface-50 text-txt-primary font-medium px-5 py-2.5 rounded-xl transition-all inline-flex items-center gap-2 hover:shadow-sm active:scale-[0.98];
+  }
+
+  .btn-danger {
+    @apply bg-red-500 hover:bg-red-600 text-white font-medium px-5 py-2.5 rounded-xl transition-all inline-flex items-center gap-2 shadow-sm;
+  }
+
+  /* ── Badges ── */
+  .badge-success {
+    @apply inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/60;
+  }
+
+  .badge-error {
+    @apply inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200/60;
+  }
+
+  .badge-blue {
+    @apply inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60;
+  }
+
+  /* ── Tabs ── */
+  .tab-item {
+    @apply px-4 py-2.5 text-sm font-medium text-txt-muted border-b-2 border-transparent hover:text-txt-primary hover:border-surface-300 transition-all cursor-pointer;
+  }
+
+  .tab-item.active {
+    @apply text-brand-600 border-brand-600;
+  }
+
+  /* ── Section label ── */
+  .section-label {
+    @apply text-[11px] font-semibold text-txt-faint uppercase tracking-wider;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-txt-primary;
+  }
+
+  /* ── Table ── */
+  .data-table {
+    @apply w-full;
+  }
+
+  .data-table thead tr {
+    @apply border-b border-surface-200;
+  }
+
+  .data-table th {
+    @apply text-left px-5 py-3 text-[10px] font-semibold text-txt-faint uppercase tracking-wider;
+  }
+
+  .data-table tbody tr {
+    @apply border-b border-gray-50 last:border-0 hover:bg-emerald-50/40 cursor-pointer transition-colors;
+  }
+
+  .data-table td {
+    @apply px-5 py-3.5;
+  }
+
+  /* ── Input ── */
+  .input {
+    @apply w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 focus:border-emerald-600 transition-all;
+  }
+
+  .select {
+    @apply w-full px-3.5 py-2.5 bg-white border border-surface-200 rounded-xl text-sm text-txt-primary focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-all appearance-none;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

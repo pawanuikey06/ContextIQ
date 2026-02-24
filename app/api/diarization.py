@@ -25,6 +25,80 @@ router = APIRouter()
 STORAGE_DIR = Path("storage")
 
 
+# ── List all meetings ──
+
+
+@router.get("/meetings")
+async def list_meetings():
+    """
+    List all meetings in storage with metadata summary.
+    Returns a list of meetings for the Dashboard.
+    """
+    meetings = []
+    if not STORAGE_DIR.exists():
+        return {"meetings": []}
+
+    for d in sorted(STORAGE_DIR.iterdir(), reverse=True):
+        if not d.is_dir() or d.name == "chroma_db":
+            continue
+
+        meeting_id = d.name
+        meta = {}
+        title = f"Meeting {meeting_id[:8]}..."
+        date = ""
+        day = ""
+        speakers_count = 0
+        segments_count = 0
+        duration = 0
+        status = "uploaded"
+
+        # Load metadata
+        meta_path = d / "metadata.json"
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                title = meta.get("auto_title", meta.get("title", title))
+                date = meta.get("processed_date", "")
+                day = meta.get("processed_day", "")
+            except Exception:
+                pass
+
+        # Load transcript info
+        transcript_path = d / "transcript.json"
+        if transcript_path.exists():
+            try:
+                with open(transcript_path, "r", encoding="utf-8") as f:
+                    tdata = json.load(f)
+                segs = tdata.get("segments", [])
+                segments_count = len(segs)
+                speakers_count = len(tdata.get("speakers", {}))
+                if segs:
+                    duration = max(s.get("end", 0) for s in segs)
+                status = "transcribed"
+            except Exception:
+                pass
+
+        # Check summary status
+        if (d / "summary.json").exists():
+            status = "summarized"
+        if (d / "Meeting_Summary.pdf").exists():
+            status = "published"
+
+        meetings.append({
+            "id": meeting_id,
+            "title": title,
+            "date": date,
+            "day": day,
+            "speakers": speakers_count,
+            "segments": segments_count,
+            "duration": duration,
+            "status": status,
+        })
+
+    return {"meetings": meetings}
+
+
 # ── Existing: GET /meeting/{meeting_id} ──
 
 

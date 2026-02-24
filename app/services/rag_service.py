@@ -145,6 +145,50 @@ class MeetingRAGService:
             logger.warning("Failed to delete old docs: %s", e)
 
     # ------------------------------------------------------------------
+    # Diverse Retrieval — ensures chunks from ALL meetings
+    # ------------------------------------------------------------------
+    def _diverse_retrieve(self, question: str, meeting_ids=None, target_k=12, fetch_k=25):
+        """
+        Retrieve chunks across ALL indexed meetings.
+        Fetches fetch_k candidates, groups by meeting, then round-robins
+        so every meeting is represented in the context.
+        """
+        from collections import defaultdict
+
+        search_kwargs = {"k": fetch_k}
+        if meeting_ids:
+            search_kwargs["filter"] = {"meeting_id": {"$in": meeting_ids}}
+
+        retriever = self._vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs=search_kwargs,
+        )
+        all_docs = retriever.invoke(question)
+
+        # Group by meeting
+        by_meeting = defaultdict(list)
+        for doc in all_docs:
+            mid = doc.metadata.get("meeting_id", "unknown")
+            by_meeting[mid].append(doc)
+
+        # Round-robin across meetings
+        diverse = []
+        meeting_keys = list(by_meeting.keys())
+        idx = 0
+        while len(diverse) < target_k and meeting_keys:
+            key = meeting_keys[idx % len(meeting_keys)]
+            if by_meeting[key]:
+                diverse.append(by_meeting[key].pop(0))
+            else:
+                meeting_keys.remove(key)
+                if not meeting_keys:
+                    break
+                continue
+            idx += 1
+
+        return diverse
+
+    # ------------------------------------------------------------------
     # Query
     # ------------------------------------------------------------------
     def query(
@@ -155,34 +199,16 @@ class MeetingRAGService:
     ) -> dict:
         """
         Answer a question using meeting transcripts.
-
-        Returns:
-            dict with keys: "answer", "citations"
-            Each citation: {meeting_id, speaker, start, end, excerpt}
+        Uses diverse retrieval to include context from ALL meetings.
         """
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-        # Build retriever (with optional meeting filter)
-        search_kwargs = {"k": 10}
-        if meeting_ids:
-            search_kwargs["filter"] = {
-                "meeting_id": {"$in": meeting_ids}
-            }
+        # Diverse retrieval across all meetings
+        docs = self._diverse_retrieve(question, meeting_ids)
 
-        retriever = self._vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs=search_kwargs,
-        )
-
-        # Retrieve relevant documents
-        docs = retriever.invoke(question)
-
-        # Build context from retrieved documents (clean, no raw timestamps)
-        context_parts = []
-        for doc in docs:
-            context_parts.append(doc.page_content)
-        context = "\n".join(context_parts)
+        # Build context
+        context = "\n".join(doc.page_content for doc in docs)
 
         # Build meeting calendar — list of ALL indexed meetings with dates
         # This enables date-based queries like "what did we discuss on Monday"
@@ -327,18 +353,8 @@ RULES:
         from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        # Build retriever
-        search_kwargs = {"k": 10}
-        if meeting_ids:
-            search_kwargs["filter"] = {"meeting_id": {"$in": meeting_ids}}
-
-        retriever = self._vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs=search_kwargs,
-        )
-
-        # Retrieve relevant documents
-        docs = retriever.invoke(question)
+        # Diverse retrieval across all meetings
+        docs = self._diverse_retrieve(question, meeting_ids)
 
         # Build context
         context = "\n".join(doc.page_content for doc in docs)

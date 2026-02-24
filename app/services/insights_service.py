@@ -357,3 +357,309 @@ RULES:
 
         logger.info("[%s] Follow-up email drafted (subject: %s)", meeting_id, result.get("subject", ""))
         return result
+
+    # ------------------------------------------------------------------
+    # Feature 4: Requirement Extraction (Optional per meeting)
+    # ------------------------------------------------------------------
+    def extract_requirements(self, meeting_id: str, force: bool = False) -> dict:
+        """
+        Extract requirements, user stories, and constraints from a meeting.
+        Cached in storage/{meeting_id}/requirements.json.
+        """
+        cache_path = STORAGE_DIR / meeting_id / "requirements.json"
+
+        if cache_path.exists() and not force:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            logger.info("[%s] Requirements returned from cache", meeting_id)
+            return cached
+
+        transcript_text, _ = self._load_transcript_text(meeting_id)
+
+        system_prompt = """You are a senior business analyst. Extract all requirements discussed in this meeting transcript.
+
+Return a JSON object with EXACTLY this format (no markdown, no code fences, just raw JSON):
+{
+  "functional_requirements": [
+    {
+      "id": "FR-001",
+      "title": "Short title",
+      "description": "Detailed description of the requirement",
+      "priority": "must-have/should-have/nice-to-have",
+      "raised_by": "Person name",
+      "status": "proposed"
+    }
+  ],
+  "non_functional_requirements": [
+    {
+      "id": "NFR-001",
+      "title": "Short title",
+      "description": "Description",
+      "category": "performance/security/scalability/usability/reliability"
+    }
+  ],
+  "user_stories": [
+    "As a [role], I want [feature], so that [benefit]"
+  ],
+  "constraints": [
+    "Budget, timeline, or technical constraint mentioned"
+  ],
+  "open_questions": [
+    "Unresolved question that needs follow-up"
+  ]
+}
+
+RULES:
+1. Only extract REAL requirements explicitly discussed — do not invent
+2. If this meeting has no requirements, return empty arrays
+3. Use auto-incrementing IDs (FR-001, FR-002, NFR-001, etc.)
+4. Return ONLY valid JSON, nothing else"""
+
+        user_prompt = f"MEETING TRANSCRIPT:\n\n{transcript_text}"
+
+        logger.info("[%s] Extracting requirements via Groq...", meeting_id)
+        raw_response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            cleaned = raw_response
+            if "```json" in cleaned:
+                cleaned = cleaned.split("```json")[1].split("```")[0]
+            elif "```" in cleaned:
+                cleaned = cleaned.split("```")[1].split("```")[0]
+            result = json.loads(cleaned.strip())
+        except json.JSONDecodeError:
+            logger.warning("[%s] LLM returned non-JSON for requirements", meeting_id)
+            result = {
+                "functional_requirements": [],
+                "non_functional_requirements": [],
+                "user_stories": [],
+                "constraints": [],
+                "open_questions": [raw_response[:500]],
+            }
+
+        result["meeting_id"] = meeting_id
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+        logger.info(
+            "[%s] Requirements extracted: %d functional, %d non-functional",
+            meeting_id,
+            len(result.get("functional_requirements", [])),
+            len(result.get("non_functional_requirements", [])),
+        )
+        return result
+
+    # ------------------------------------------------------------------
+    # Feature 5: Documentation Generation (Optional per meeting)
+    # ------------------------------------------------------------------
+    def generate_documentation(self, meeting_id: str, force: bool = False) -> dict:
+        """
+        Generate structured meeting documentation / MoM.
+        Cached in storage/{meeting_id}/documentation.json.
+        """
+        cache_path = STORAGE_DIR / meeting_id / "documentation.json"
+
+        if cache_path.exists() and not force:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            logger.info("[%s] Documentation returned from cache", meeting_id)
+            return cached
+
+        transcript_text, _ = self._load_transcript_text(meeting_id)
+
+        # Load title
+        title = f"Meeting {meeting_id[:8]}"
+        meta_path = STORAGE_DIR / meeting_id / "metadata.json"
+        if meta_path.exists():
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            title = meta.get("auto_title", meta.get("title", title))
+
+        system_prompt = """You are a technical writer creating formal meeting documentation (Minutes of Meeting).
+
+Return a JSON object with EXACTLY this format (no markdown, no code fences, just raw JSON):
+{
+  "title": "Meeting title",
+  "objective": "What was the purpose of this meeting",
+  "topics_discussed": [
+    {
+      "topic": "Topic name",
+      "summary": "Key points discussed under this topic",
+      "speakers_involved": ["Person 1", "Person 2"]
+    }
+  ],
+  "technical_details": [
+    {
+      "area": "Technical area discussed",
+      "details": "Technical details, architecture decisions, implementation notes",
+      "tools_mentioned": ["Tool 1", "Tool 2"]
+    }
+  ],
+  "decisions_and_rationale": [
+    {
+      "decision": "What was decided",
+      "rationale": "Why this decision was made",
+      "alternatives_discussed": "Other options that were considered"
+    }
+  ],
+  "next_steps": [
+    "Clear next step with owner if mentioned"
+  ],
+  "parking_lot": [
+    "Items deferred for future discussion"
+  ]
+}
+
+RULES:
+1. Be thorough — capture all key discussion points
+2. Group by topics logically
+3. Include technical details where discussed
+4. If a section has no content, return an empty array
+5. Return ONLY valid JSON, nothing else"""
+
+        user_prompt = f"MEETING TITLE: {title}\n\nMEETING TRANSCRIPT:\n\n{transcript_text}"
+
+        logger.info("[%s] Generating documentation via Groq...", meeting_id)
+        raw_response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            cleaned = raw_response
+            if "```json" in cleaned:
+                cleaned = cleaned.split("```json")[1].split("```")[0]
+            elif "```" in cleaned:
+                cleaned = cleaned.split("```")[1].split("```")[0]
+            result = json.loads(cleaned.strip())
+        except json.JSONDecodeError:
+            logger.warning("[%s] LLM returned non-JSON for docs", meeting_id)
+            result = {
+                "title": title,
+                "objective": "",
+                "topics_discussed": [],
+                "technical_details": [],
+                "decisions_and_rationale": [],
+                "next_steps": [],
+                "parking_lot": [],
+            }
+
+        result["meeting_id"] = meeting_id
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+        logger.info("[%s] Documentation generated: %d topics", meeting_id, len(result.get("topics_discussed", [])))
+        return result
+
+    # ------------------------------------------------------------------
+    # Feature 6: Sentiment Analysis (Optional per meeting)
+    # ------------------------------------------------------------------
+    def analyze_sentiment(self, meeting_id: str, force: bool = False) -> dict:
+        """
+        Analyze sentiment of each speaker segment in the meeting.
+        Cached in storage/{meeting_id}/sentiment.json.
+        """
+        cache_path = STORAGE_DIR / meeting_id / "sentiment.json"
+
+        if cache_path.exists() and not force:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            logger.info("[%s] Sentiment returned from cache", meeting_id)
+            return cached
+
+        transcript_text, segments = self._load_transcript_text(meeting_id)
+
+        # Build a condensed version for sentiment analysis
+        segment_lines = []
+        for idx, seg in enumerate(segments):
+            speaker = seg.get("speaker", "UNKNOWN")
+            text = seg.get("text", "").strip()
+            start = seg.get("start", 0)
+            if text:
+                segment_lines.append(f"[{idx}] {speaker} ({start}s): {text}")
+
+        segments_block = "\n".join(segment_lines)
+
+        system_prompt = """You are a sentiment analysis expert. Analyze the sentiment of each segment in the meeting transcript.
+
+For each segment, determine:
+- sentiment: "positive", "negative", or "neutral"
+- score: a number from -1.0 (most negative) to 1.0 (most positive), 0 is neutral
+- emotion: the primary emotion (e.g. "enthusiastic", "concerned", "frustrated", "agreeable", "neutral", "excited", "skeptical")
+
+Return a JSON object with EXACTLY this format (no markdown, no code fences, just raw JSON):
+{
+  "segments": [
+    {
+      "index": 0,
+      "sentiment": "positive",
+      "score": 0.7,
+      "emotion": "enthusiastic"
+    }
+  ],
+  "overall_sentiment": "positive",
+  "overall_score": 0.5,
+  "mood_summary": "One sentence describing the overall mood of the meeting",
+  "highlights": {
+    "most_positive": "Brief quote or moment that was most positive",
+    "most_negative": "Brief quote or moment that was most negative or N/A",
+    "turning_points": ["Any moment where mood shifted significantly"]
+  }
+}
+
+RULES:
+1. Analyze ALL segments — one entry per segment index
+2. Be accurate — don't default everything to neutral
+3. Pick up on subtle cues: agreement, pushback, excitement, frustration
+4. Return ONLY valid JSON, nothing else"""
+
+        user_prompt = f"MEETING SEGMENTS:\n\n{segments_block}"
+
+        logger.info("[%s] Analyzing sentiment via Groq...", meeting_id)
+        raw_response = self._call_llm(system_prompt, user_prompt)
+
+        try:
+            cleaned = raw_response
+            if "```json" in cleaned:
+                cleaned = cleaned.split("```json")[1].split("```")[0]
+            elif "```" in cleaned:
+                cleaned = cleaned.split("```")[1].split("```")[0]
+            result = json.loads(cleaned.strip())
+        except json.JSONDecodeError:
+            logger.warning("[%s] LLM returned non-JSON for sentiment", meeting_id)
+            result = {
+                "segments": [],
+                "overall_sentiment": "neutral",
+                "overall_score": 0.0,
+                "mood_summary": "Could not analyze sentiment.",
+                "highlights": {"most_positive": "N/A", "most_negative": "N/A", "turning_points": []},
+            }
+
+        # Enrich segments with original data
+        enriched_segments = []
+        sentiment_map = {s["index"]: s for s in result.get("segments", []) if "index" in s}
+        for idx, seg in enumerate(segments):
+            s_data = sentiment_map.get(idx, {"sentiment": "neutral", "score": 0.0, "emotion": "neutral"})
+            enriched_segments.append({
+                "index": idx,
+                "speaker": seg.get("speaker", "UNKNOWN"),
+                "start": seg.get("start", 0),
+                "end": seg.get("end", 0),
+                "text": seg.get("text", ""),
+                "sentiment": s_data.get("sentiment", "neutral"),
+                "score": s_data.get("score", 0.0),
+                "emotion": s_data.get("emotion", "neutral"),
+            })
+
+        result["segments"] = enriched_segments
+        result["meeting_id"] = meeting_id
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+        pos = sum(1 for s in enriched_segments if s["sentiment"] == "positive")
+        neg = sum(1 for s in enriched_segments if s["sentiment"] == "negative")
+        logger.info("[%s] Sentiment analyzed: %d segments (%d pos, %d neg)", meeting_id, len(enriched_segments), pos, neg)
+        return result

@@ -14,6 +14,9 @@ from app.api.publish import router as publish_router
 from app.api.speaker_map import router as speaker_map_router
 from app.api.chat import router as chat_router
 from app.api.insights import router as insights_router
+from app.api.stats import router as stats_router
+from app.api.subtitles import router as subtitles_router
+from app.api.search import router as search_router
 
 # Configure logging
 logging.basicConfig(
@@ -22,6 +25,20 @@ logging.basicConfig(
 )
 
 app = FastAPI(title="Meeting Intelligence System", version="2.0.0")
+
+# CORS — allow Svelte frontend to call the API
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",  # Vite preview
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Register all routers
 app.include_router(upload_router, tags=["Upload"])
@@ -32,6 +49,9 @@ app.include_router(publish_router, tags=["Publish"])
 app.include_router(speaker_map_router, tags=["Speaker Map"])
 app.include_router(chat_router, tags=["Chat"])
 app.include_router(insights_router, tags=["Insights"])
+app.include_router(stats_router, tags=["Stats"])
+app.include_router(subtitles_router, tags=["Subtitles"])
+app.include_router(search_router, tags=["Search"])
 
 
 @app.get("/")

@@ -71,3 +71,23 @@ async def download_pdf(meeting_id: str):
         filename="Meeting_Summary.pdf",
         media_type="application/pdf",
     )
+
+
+@router.get("/publish/{meeting_id}/full-report")
+async def download_full_report(meeting_id: str):
+    """Generate and download a comprehensive full meeting report PDF."""
+    from pathlib import Path
+    try:
+        service = MeetingPublishService()
+        pdf_path = service.generate_full_report(meeting_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("[%s] Full report generation failed: %s", meeting_id, e)
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+
+    return FileResponse(
+        path=pdf_path,
+        filename="Full_Meeting_Report.pdf",
+        media_type="application/pdf",
+    )

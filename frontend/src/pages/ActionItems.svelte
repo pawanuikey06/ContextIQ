@@ -1,6 +1,5 @@
 <script>
     import { onMount } from "svelte";
-    import { push } from "svelte-spa-router";
     import {
         CheckCircle,
         CheckCircle2,
@@ -21,6 +20,7 @@
         Shield,
         ShieldCheck,
         ArrowUpRight,
+        Send,
     } from "lucide-svelte";
     import { api, get, post, put } from "../lib/api.js";
     import { shortId } from "../lib/utils.js";
@@ -45,6 +45,12 @@
     let editingIndex = -1;
     let editDraft = {};
     let activeSection = null;
+
+    // Jira integration
+    let jiraConfigured = false;
+    let pushingJira = false;
+    let syncingJira = false;
+    let jiraPushResult = null;
 
     const statusOptions = ["To Do", "In Progress", "In Review", "Done"];
     const priorityOptions = ["High", "Medium", "Low"];
@@ -98,6 +104,13 @@
     }
     onMount(async () => {
         await loadMeetings();
+        // Check Jira config
+        try {
+            const jStatus = await get(api.jiraStatus);
+            jiraConfigured = jStatus.configured || false;
+        } catch {
+            jiraConfigured = false;
+        }
     });
 
     async function loadMeetings() {
@@ -211,20 +224,96 @@
         if (editingIndex < 0) return;
         actionData.action_items[editingIndex] = { ...editDraft };
         actionData = actionData; // trigger reactivity
+        const savedIdx = editingIndex;
         editingIndex = -1;
         editDraft = {};
         dirty = true;
         updateStats();
+        // Auto-push to Jira if linked
+        updateJiraIfLinked(savedIdx);
     }
 
     function updateItemStatus(idx, status) {
         actionData.action_items[idx].status = status;
         actionData = actionData;
         dirty = true;
+        // Auto-push status to Jira if linked
+        updateJiraIfLinked(idx);
+    }
+
+    async function updateJiraIfLinked(idx) {
+        if (!jiraConfigured || !selectedMeeting) return;
+        const item = actionData.action_items[idx];
+        if (!item?.jira_id) return;
+        try {
+            // Save first so backend has latest data
+            await saveAll();
+            const result = await put(api.jiraUpdate(selectedMeeting), {
+                index: idx,
+            });
+            if (result.success && result.updated_fields?.length > 0) {
+                toasts.success(
+                    `${item.jira_id} updated: ${result.updated_fields.join(", ")}`,
+                );
+            }
+        } catch (err) {
+            toasts.error(`Jira update failed: ${err.message}`);
+        }
     }
 
     function getStatusColor(s) {
         return statusColors[s] || statusColors["To Do"];
+    }
+
+    async function pushToJira(indices = null) {
+        if (!selectedMeeting || !actionData) return;
+        pushingJira = true;
+        jiraPushResult = null;
+        try {
+            const result = await post(api.jiraPush(selectedMeeting), {
+                indices,
+            });
+            jiraPushResult = result;
+            if (result.created > 0) {
+                toasts.success(
+                    `Created ${result.created} Jira ticket${result.created > 1 ? "s" : ""}!`,
+                );
+                // Reload to get updated jira_id fields
+                await loadActionItems(selectedMeeting);
+            }
+            if (result.failed > 0) {
+                toasts.error(
+                    `${result.failed} ticket${result.failed > 1 ? "s" : ""} failed to create.`,
+                );
+            }
+        } catch (err) {
+            toasts.error("Jira push failed: " + err.message);
+        }
+        pushingJira = false;
+    }
+
+    async function pushSingleToJira(idx) {
+        await pushToJira([idx]);
+    }
+
+    async function syncFromJira() {
+        if (!selectedMeeting || !actionData) return;
+        syncingJira = true;
+        try {
+            const result = await post(api.jiraSync(selectedMeeting));
+            if (result.changes?.length > 0) {
+                const msgs = result.changes.map(
+                    (c) => `${c.key}: ${c.changes.join(", ")}`,
+                );
+                toasts.success(`Synced! ${msgs.join(" | ")}`);
+            } else {
+                toasts.success("All up to date — no changes from Jira.");
+            }
+            await loadActionItems(selectedMeeting);
+        } catch (err) {
+            toasts.error("Jira sync failed: " + err.message);
+        }
+        syncingJira = false;
     }
 </script>
 
@@ -261,6 +350,21 @@
                     on:click={approveAll}
                 >
                     <ShieldCheck size={14} /> Approve All
+                </button>
+            {/if}
+            {#if jiraConfigured && actionData?.action_items?.some((i) => i.jira_id)}
+                <button
+                    class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium px-4 py-2 rounded-xl transition-all inline-flex items-center gap-2 text-sm border border-blue-200"
+                    on:click={syncFromJira}
+                    disabled={syncingJira}
+                >
+                    {#if syncingJira}
+                        <Loader2 size={14} class="animate-spin" />
+                        Syncing…
+                    {:else}
+                        <RotateCcw size={14} />
+                        Sync from Jira
+                    {/if}
                 </button>
             {/if}
         </div>
@@ -495,6 +599,16 @@
                 border: "border-purple-100",
                 count: actionData.follow_ups?.length || 0,
                 desc: "Pending follow-up items that need attention.",
+            },
+            {
+                id: "risks",
+                label: "Risks Identified",
+                icon: AlertCircle,
+                color: "text-red-600",
+                bg: "bg-red-50",
+                border: "border-red-100",
+                count: actionData.risks_identified?.length || 0,
+                desc: "Potential risks and blockers mentioned in the meeting.",
             },
         ]}
 
@@ -751,6 +865,40 @@
                                                 >
                                                     <Pencil size={13} />
                                                 </button>
+                                                {#if jiraConfigured && !item.jira_id}
+                                                    <button
+                                                        on:click={() =>
+                                                            pushSingleToJira(
+                                                                idx,
+                                                            )}
+                                                        disabled={pushingJira}
+                                                        class="text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200/60 font-semibold px-2.5 py-1 rounded-lg text-[10px] inline-flex items-center gap-1 transition-colors"
+                                                        title="Create Jira ticket for this item"
+                                                    >
+                                                        {#if pushingJira}
+                                                            <Loader2
+                                                                size={10}
+                                                                class="animate-spin"
+                                                            />
+                                                        {:else}
+                                                            <Send size={10} />
+                                                        {/if}
+                                                        Push to Jira
+                                                    </button>
+                                                {/if}
+                                                {#if item.jira_id}
+                                                    <a
+                                                        href="https://pawanuikey690.atlassian.net/browse/{item.jira_id}"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="text-[10px] font-mono text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200/60 px-2 py-1 rounded-lg inline-flex items-center gap-1 transition-colors no-underline"
+                                                    >
+                                                        <ExternalLink
+                                                            size={10}
+                                                        />
+                                                        {item.jira_id}
+                                                    </a>
+                                                {/if}
                                             </div>
                                             <div
                                                 class="flex flex-wrap items-center gap-2"
@@ -794,7 +942,47 @@
                                                         >{item.jira_id}</span
                                                     >
                                                 {/if}
+                                                {#if item.category}
+                                                    <span
+                                                        class="text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-1 rounded-lg capitalize"
+                                                    >
+                                                        {item.category}
+                                                    </span>
+                                                {/if}
                                             </div>
+                                            {#if item.context}
+                                                <p
+                                                    class="text-[11px] text-gray-400 mt-2 leading-relaxed"
+                                                >
+                                                    <span
+                                                        class="font-medium text-gray-500"
+                                                        >Context:</span
+                                                    >
+                                                    {item.context}
+                                                </p>
+                                            {/if}
+                                            {#if item.success_criteria}
+                                                <p
+                                                    class="text-[11px] text-emerald-500 mt-1"
+                                                >
+                                                    <span class="font-medium"
+                                                        >✓ Success:</span
+                                                    >
+                                                    {item.success_criteria}
+                                                </p>
+                                            {/if}
+                                            {#if item.dependencies?.length}
+                                                <div
+                                                    class="flex flex-wrap gap-1 mt-1.5"
+                                                >
+                                                    {#each item.dependencies as dep}
+                                                        <span
+                                                            class="text-[9px] font-mono text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded"
+                                                            >↗ {dep}</span
+                                                        >
+                                                    {/each}
+                                                </div>
+                                            {/if}
                                         </div>
                                     </div>
                                 </div>
@@ -846,6 +1034,24 @@
                                         >
                                         {d.context || "N/A"}
                                     </p>
+                                    {#if d.impact}
+                                        <p>
+                                            <span
+                                                class="font-medium text-emerald-500"
+                                                >Impact:</span
+                                            >
+                                            {d.impact}
+                                        </p>
+                                    {/if}
+                                    {#if d.alternatives_considered}
+                                        <p>
+                                            <span
+                                                class="font-medium text-gray-500"
+                                                >Alternatives:</span
+                                            >
+                                            {d.alternatives_considered}
+                                        </p>
+                                    {/if}
                                 </div>
                             </div>
                         {/each}
@@ -869,7 +1075,7 @@
                     <div
                         class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
                     >
-                        <ul class="space-y-2">
+                        <ul class="space-y-3">
                             {#each actionData.key_takeaways as t}
                                 <li
                                     class="text-sm text-gray-600 flex items-start gap-2"
@@ -877,7 +1083,30 @@
                                     <span class="text-amber-500 mt-1 text-[8px]"
                                         >●</span
                                     >
-                                    {t}
+                                    <div class="flex-1">
+                                        <span
+                                            >{typeof t === "string"
+                                                ? t
+                                                : t.takeaway || t}</span
+                                        >
+                                        {#if typeof t === "object" && t.category}
+                                            <span
+                                                class="ml-2 text-[9px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded capitalize"
+                                                >{t.category}</span
+                                            >
+                                        {/if}
+                                        {#if typeof t === "object" && t.importance}
+                                            <span
+                                                class="ml-1 text-[9px] font-semibold {t.importance ===
+                                                'high'
+                                                    ? 'text-red-600 bg-red-50'
+                                                    : t.importance === 'medium'
+                                                      ? 'text-amber-600 bg-amber-50'
+                                                      : 'text-gray-500 bg-gray-50'} px-1.5 py-0.5 rounded"
+                                                >{t.importance}</span
+                                            >
+                                        {/if}
+                                    </div>
                                 </li>
                             {/each}
                         </ul>
@@ -901,7 +1130,7 @@
                     <div
                         class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
                     >
-                        <ul class="space-y-2">
+                        <ul class="space-y-3">
                             {#each actionData.follow_ups as f}
                                 <li
                                     class="text-sm text-gray-600 flex items-start gap-2"
@@ -910,10 +1139,103 @@
                                         class="text-purple-500 mt-1 text-[8px]"
                                         >●</span
                                     >
-                                    {f}
+                                    <div class="flex-1">
+                                        <span
+                                            >{typeof f === "string"
+                                                ? f
+                                                : f.item || f}</span
+                                        >
+                                        {#if typeof f === "object" && f.owner}
+                                            <span
+                                                class="ml-2 text-[9px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded"
+                                                >👤 {f.owner}</span
+                                            >
+                                        {/if}
+                                        {#if typeof f === "object" && f.urgency}
+                                            <span
+                                                class="ml-1 text-[9px] font-semibold {f.urgency ===
+                                                'immediate'
+                                                    ? 'text-red-600 bg-red-50'
+                                                    : f.urgency === 'this-week'
+                                                      ? 'text-amber-600 bg-amber-50'
+                                                      : 'text-gray-500 bg-gray-50'} px-1.5 py-0.5 rounded"
+                                                >{f.urgency}</span
+                                            >
+                                        {/if}
+                                        {#if typeof f === "object" && f.context}
+                                            <p
+                                                class="text-[11px] text-gray-400 mt-0.5"
+                                            >
+                                                {f.context}
+                                            </p>
+                                        {/if}
+                                    </div>
                                 </li>
                             {/each}
                         </ul>
+                    </div>
+                </div>
+            {/if}
+
+            <!-- RISKS SECTION -->
+            {#if activeSection === "risks" && actionData.risks_identified?.length}
+                <div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <div
+                            class="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center"
+                        >
+                            <AlertCircle size={16} class="text-red-600" />
+                        </div>
+                        <h3 class="text-sm font-bold text-gray-900">
+                            Risks Identified
+                        </h3>
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-3">
+                        {#each actionData.risks_identified as r}
+                            <div
+                                class="bg-white rounded-2xl border border-red-100 shadow-sm p-5 hover:shadow-md transition-all"
+                            >
+                                <p
+                                    class="text-sm font-semibold text-gray-900 flex items-start gap-2"
+                                >
+                                    <AlertCircle
+                                        size={14}
+                                        class="text-red-500 mt-0.5 flex-shrink-0"
+                                    />
+                                    {r.risk || r}
+                                </p>
+                                <div
+                                    class="text-[11px] text-gray-400 mt-2 ml-5 space-y-0.5"
+                                >
+                                    {#if r.impact}
+                                        <p>
+                                            <span
+                                                class="font-medium text-gray-500"
+                                                >Impact:</span
+                                            >
+                                            <span
+                                                class="font-semibold {r.impact ===
+                                                'high'
+                                                    ? 'text-red-600'
+                                                    : r.impact === 'medium'
+                                                      ? 'text-amber-600'
+                                                      : 'text-gray-500'}"
+                                                >{r.impact}</span
+                                            >
+                                        </p>
+                                    {/if}
+                                    {#if r.mitigation}
+                                        <p>
+                                            <span
+                                                class="font-medium text-emerald-500"
+                                                >Mitigation:</span
+                                            >
+                                            {r.mitigation}
+                                        </p>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 </div>
             {/if}

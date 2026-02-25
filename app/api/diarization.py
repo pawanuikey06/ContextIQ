@@ -10,6 +10,7 @@ import json
 import logging
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
 from app.schemas.schemas import (
     MeetingResponse,
@@ -248,3 +249,24 @@ async def update_metadata(meeting_id: str, body: MeetingMetadataRequest):
     logger.info("[%s] Metadata updated: %s", meeting_id, list(update_data.keys()))
 
     return MeetingMetadataResponse(meeting_id=meeting_id, **meta)
+
+
+# ------------------------------------------------------------------
+# Video Playback
+# ------------------------------------------------------------------
+@router.head("/meeting/{meeting_id}/video")
+@router.get("/meeting/{meeting_id}/video")
+async def get_meeting_video(meeting_id: str):
+    """
+    Stream the original video file for in-browser playback.
+    Video is stored at storage/{meeting_id}/video.mp4
+    """
+    video_path = STORAGE_DIR / meeting_id / "video.mp4"
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="Video not found for this meeting")
+
+    return FileResponse(
+        path=str(video_path),
+        media_type="video/mp4",
+        filename=f"{meeting_id}.mp4",
+    )

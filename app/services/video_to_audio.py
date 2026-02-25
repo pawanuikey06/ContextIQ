@@ -22,7 +22,7 @@ class VideoAudioConverter:
             self.ffmpeg_path,
             "-y",
             "-i", str(video_path),
-            "-map", "0:a:0",        # Only take the first audio stream (skip subtitles/data)
+            "-map", "0:a:0",        # Only take the first audio stream
             "-vn",                   # No video
             "-acodec", "pcm_s16le",
             "-ar", "16000",

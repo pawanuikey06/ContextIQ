@@ -17,6 +17,7 @@ from app.api.insights import router as insights_router
 from app.api.stats import router as stats_router
 from app.api.subtitles import router as subtitles_router
 from app.api.search import router as search_router
+from app.api.jira import router as jira_router
 
 # Configure logging
 logging.basicConfig(
@@ -56,6 +57,7 @@ app.include_router(insights_router, tags=["Insights"])
 app.include_router(stats_router, tags=["Stats"])
 app.include_router(subtitles_router, tags=["Subtitles"])
 app.include_router(search_router, tags=["Search"])
+app.include_router(jira_router, tags=["Jira"])
 
 
 @app.get("/")
@@ -92,8 +94,11 @@ async def root():
             "GET  /meeting/{meeting_id}/subtitles/srt",
             "GET  /meeting/{meeting_id}/subtitles/vtt",
             "GET  /search?q=keyword",
+            "GET  /meeting/{meeting_id}/video",
             "GET  /stats",
             "GET  /health",
+            "GET  /jira/status",
+            "POST /meeting/{meeting_id}/jira/push",
         ]
     }
 

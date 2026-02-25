@@ -114,8 +114,17 @@ async def upload_video(file: UploadFile = File(...)):
             detail=f"Audio extraction failed: {str(e)}"
         )
     finally:
+        # Keep video for playback — move to storage dir
         if temp_video_path.exists():
-            temp_video_path.unlink()
+            meeting_dir = STORAGE_DIR / meeting_id
+            meeting_dir.mkdir(parents=True, exist_ok=True)
+            saved_video = meeting_dir / "video.mp4"
+            try:
+                import shutil
+                shutil.move(str(temp_video_path), str(saved_video))
+                logger.info("[%s] Video saved: %s", meeting_id, saved_video)
+            except Exception:
+                temp_video_path.unlink(missing_ok=True)
 
     return UploadResponse(
         meeting_id=meeting_id,

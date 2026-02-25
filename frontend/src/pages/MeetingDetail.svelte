@@ -1,6 +1,5 @@
 <script>
-    import { onMount } from "svelte";
-    import { push } from "svelte-spa-router";
+    import { onMount, afterUpdate, tick } from "svelte";
     import {
         ChevronLeft,
         Users,
@@ -13,7 +12,6 @@
         RefreshCw,
         Check,
         Edit3,
-        Play,
         Hash,
         ArrowUpRight,
         ClipboardList,
@@ -34,6 +32,15 @@
         SPEAKER_COLORS,
         shortId,
     } from "../lib/utils.js";
+    import Skeleton from "../components/Skeleton.svelte";
+    import {
+        Chart,
+        DoughnutController,
+        ArcElement,
+        Tooltip,
+        Legend,
+    } from "chart.js";
+    Chart.register(DoughnutController, ArcElement, Tooltip, Legend);
 
     export let params = {};
 
@@ -375,17 +382,178 @@
 
     $: totalDur =
         segments.length > 0 ? Math.max(...segments.map((s) => s.end)) : 0;
+
+    // Speaker talk-time data (computed from segments)
+    let talkTimeChart = null;
+    let talkTimeCanvas;
+
+    $: speakerTalkTime = (() => {
+        const times = {};
+        segments.forEach((seg) => {
+            const spk = seg.speaker || "UNKNOWN";
+            if (!times[spk]) times[spk] = 0;
+            times[spk] += seg.end - seg.start;
+        });
+        const total = Object.values(times).reduce((a, b) => a + b, 0) || 1;
+        return Object.entries(times)
+            .sort((a, b) => b[1] - a[1])
+            .map(([speaker, duration]) => ({
+                speaker,
+                duration,
+                percent: Math.round((duration / total) * 100),
+                label: displayName(speaker),
+            }));
+    })();
+
+    async function renderTalkTimeChart() {
+        if (!talkTimeCanvas || speakerTalkTime.length === 0) return;
+        await tick();
+        if (talkTimeChart) talkTimeChart.destroy();
+        const colors = speakerTalkTime.map((s) => getColor(s.speaker));
+        talkTimeChart = new Chart(talkTimeCanvas, {
+            type: "doughnut",
+            data: {
+                labels: speakerTalkTime.map((s) => s.label),
+                datasets: [
+                    {
+                        data: speakerTalkTime.map((s) => s.duration),
+                        backgroundColor: colors,
+                        borderColor: "#fff",
+                        borderWidth: 3,
+                        hoverBorderWidth: 0,
+                        borderRadius: 4,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: "65%",
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1e293b",
+                        titleFont: { size: 13, weight: "bold" },
+                        bodyFont: { size: 12 },
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: (ctx) => {
+                                const s = speakerTalkTime[ctx.dataIndex];
+                                const mins = Math.floor(s.duration / 60);
+                                const secs = Math.round(s.duration % 60);
+                                return ` ${s.percent}% (${mins}m ${secs}s)`;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    // Render chart when Speaker tab becomes active
+    let chartRendered = false;
+    afterUpdate(() => {
+        if (activeTab === "speaker" && talkTimeCanvas && !chartRendered) {
+            chartRendered = true;
+            renderTalkTimeChart();
+        }
+        if (activeTab !== "speaker") {
+            chartRendered = false;
+        }
+    });
 </script>
 
-<!-- ───────────────────────────────── LOADING ──────────────────────────── -->
+<!-- ───────────────────────────────── SKELETON LOADING ──────────────────────── -->
 {#if loading}
-    <div class="flex flex-col items-center justify-center py-32 gap-3">
+    <!-- Skeleton Header Bar -->
+    <div
+        class="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-surface-200/60"
+    >
         <div
-            class="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center"
+            class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between"
         >
-            <Loader2 size={20} class="text-brand-600 animate-spin" />
+            <div class="flex items-center gap-4">
+                <Skeleton width="32px" height="32px" rounded="rounded-lg" />
+                <div class="space-y-2">
+                    <Skeleton
+                        width="220px"
+                        height="18px"
+                        rounded="rounded-md"
+                    />
+                    <Skeleton
+                        width="140px"
+                        height="12px"
+                        rounded="rounded-md"
+                    />
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <Skeleton width="90px" height="28px" rounded="rounded-lg" />
+                <Skeleton width="90px" height="28px" rounded="rounded-lg" />
+            </div>
         </div>
-        <span class="text-sm text-txt-muted">Loading meeting…</span>
+    </div>
+
+    <!-- Skeleton Tab Bar -->
+    <div class="max-w-6xl mx-auto px-6 pt-4">
+        <div class="flex gap-2 mb-6 overflow-x-auto pb-1">
+            {#each Array(6) as _}
+                <Skeleton
+                    width="110px"
+                    height="52px"
+                    rounded="rounded-xl"
+                    className="flex-shrink-0"
+                />
+            {/each}
+        </div>
+
+        <!-- Skeleton Chat Messages -->
+        <div class="max-w-3xl space-y-3">
+            {#each [100, 85, 92, 70, 95] as pct, i}
+                <div
+                    class="bg-white rounded-xl border border-surface-200/60 shadow-sm p-4 flex gap-3.5"
+                >
+                    <Skeleton
+                        width="36px"
+                        height="36px"
+                        rounded="rounded-full"
+                        className="flex-shrink-0"
+                    />
+                    <div class="flex-1 space-y-2.5">
+                        <div class="flex items-center gap-2">
+                            <Skeleton
+                                width="{60 + i * 20}px"
+                                height="14px"
+                                rounded="rounded-md"
+                            />
+                            <Skeleton
+                                width="70px"
+                                height="12px"
+                                rounded="rounded"
+                            />
+                        </div>
+                        <Skeleton
+                            width="{pct}%"
+                            height="12px"
+                            rounded="rounded"
+                        />
+                        <Skeleton
+                            width="{pct - 20}%"
+                            height="12px"
+                            rounded="rounded"
+                        />
+                        {#if i % 2 === 0}
+                            <Skeleton
+                                width="{pct - 35}%"
+                                height="12px"
+                                rounded="rounded"
+                            />
+                        {/if}
+                    </div>
+                </div>
+            {/each}
+        </div>
     </div>
 {:else if !data}
     <div class="max-w-md mx-auto px-6 py-24 text-center">
@@ -690,6 +858,81 @@
 
             <!-- ═══════════════════ SPEAKER VIEW ═══════════════════ -->
         {:else if activeTab === "speaker"}
+            <!-- Talk-Time Chart -->
+            {#if speakerTalkTime.length > 0}
+                <div
+                    class="bg-white rounded-2xl border border-surface-200 shadow-sm p-6 mb-6"
+                >
+                    <span
+                        class="text-[10px] font-bold text-blue-600 uppercase tracking-[0.15em] block mb-4"
+                        >Speaker Talk-Time Analysis</span
+                    >
+                    <div class="flex flex-col md:flex-row items-center gap-8">
+                        <!-- Doughnut Chart -->
+                        <div class="relative w-52 h-52 flex-shrink-0">
+                            <canvas
+                                bind:this={talkTimeCanvas}
+                                width="208"
+                                height="208"
+                            ></canvas>
+                            <div
+                                class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                            >
+                                <span
+                                    class="text-2xl font-extrabold text-txt-primary"
+                                    >{speakerTalkTime.length}</span
+                                >
+                                <span
+                                    class="text-[10px] text-txt-faint uppercase tracking-wider"
+                                    >Speakers</span
+                                >
+                            </div>
+                        </div>
+                        <!-- Speaker Bars -->
+                        <div class="flex-1 w-full space-y-3">
+                            {#each speakerTalkTime as s}
+                                <div>
+                                    <div
+                                        class="flex items-center justify-between mb-1"
+                                    >
+                                        <div class="flex items-center gap-2">
+                                            <div
+                                                class="w-3 h-3 rounded-full"
+                                                style="background-color: {getColor(
+                                                    s.speaker,
+                                                )}"
+                                            ></div>
+                                            <span
+                                                class="text-sm font-semibold text-txt-primary"
+                                                >{s.label}</span
+                                            >
+                                        </div>
+                                        <span
+                                            class="text-xs text-txt-faint font-mono"
+                                            >{s.percent}% · {Math.floor(
+                                                s.duration / 60,
+                                            )}m {Math.round(
+                                                s.duration % 60,
+                                            )}s</span
+                                        >
+                                    </div>
+                                    <div
+                                        class="w-full bg-surface-100 rounded-full h-2.5 overflow-hidden"
+                                    >
+                                        <div
+                                            class="h-full rounded-full transition-all duration-700 ease-out"
+                                            style="width: {s.percent}%; background-color: {getColor(
+                                                s.speaker,
+                                            )}"
+                                        ></div>
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    </div>
+                </div>
+            {/if}
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {#each Object.entries(speakers) as [spkId, segs]}
                     <div
@@ -998,8 +1241,8 @@
                             >Requirements</span
                         >
                         <p class="text-xs text-txt-faint">
-                            Extract functional requirements, user stories, and
-                            constraints discussed in this meeting.
+                            Extract functional requirements, user stories,
+                            risks, and constraints discussed in this meeting.
                         </p>
                     </div>
                     <button
@@ -1036,24 +1279,48 @@
                         </p>
                     </div>
                 {:else}
+                    <!-- Summary Banner -->
+                    {#if reqData.summary}
+                        <div
+                            class="mb-6 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200/60"
+                        >
+                            <span
+                                class="text-[10px] font-bold text-emerald-700 uppercase tracking-[0.15em] block mb-1"
+                                >Overview</span
+                            >
+                            <p class="text-sm text-emerald-900">
+                                {reqData.summary}
+                            </p>
+                        </div>
+                    {/if}
+
                     <!-- Functional Requirements -->
                     {#if reqData.functional_requirements?.length}
                         <div class="mb-6">
-                            <span
-                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-3"
-                                >Functional Requirements</span
-                            >
-                            <div class="space-y-2">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span
+                                    class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em]"
+                                    >Functional Requirements</span
+                                >
+                                <span
+                                    class="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full"
+                                    >{reqData.functional_requirements
+                                        .length}</span
+                                >
+                            </div>
+                            <div class="space-y-3">
                                 {#each reqData.functional_requirements as req}
                                     <div
-                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60"
+                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60 hover:border-emerald-300/60 transition-colors"
                                     >
                                         <div
                                             class="flex items-start justify-between gap-3"
                                         >
-                                            <div>
+                                            <div
+                                                class="flex items-center gap-2"
+                                            >
                                                 <span
-                                                    class="text-[10px] font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-2"
+                                                    class="text-[10px] font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded"
                                                     >{req.id}</span
                                                 >
                                                 <span
@@ -1061,28 +1328,99 @@
                                                     >{req.title}</span
                                                 >
                                             </div>
-                                            <span
-                                                class="text-[10px] font-semibold px-2 py-0.5 rounded-full border
-                                                {req.priority === 'must-have'
-                                                    ? 'text-red-700 bg-red-50 border-red-200'
-                                                    : req.priority ===
-                                                        'should-have'
-                                                      ? 'text-amber-700 bg-amber-50 border-amber-200'
-                                                      : 'text-emerald-700 bg-emerald-50 border-emerald-200'}"
-                                                >{req.priority}</span
+                                            <div
+                                                class="flex items-center gap-1.5 shrink-0"
                                             >
+                                                <span
+                                                    class="text-[10px] font-semibold px-2 py-0.5 rounded-full border
+                                                    {req.priority ===
+                                                    'must-have'
+                                                        ? 'text-red-700 bg-red-50 border-red-200'
+                                                        : req.priority ===
+                                                            'should-have'
+                                                          ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                                          : 'text-emerald-700 bg-emerald-50 border-emerald-200'}"
+                                                    >{req.priority}</span
+                                                >
+                                                {#if req.status}
+                                                    <span
+                                                        class="text-[10px] font-medium px-2 py-0.5 rounded-full
+                                                        {req.status === 'agreed'
+                                                            ? 'text-green-700 bg-green-50'
+                                                            : req.status ===
+                                                                'needs-discussion'
+                                                              ? 'text-orange-700 bg-orange-50'
+                                                              : 'text-slate-600 bg-slate-50'}"
+                                                        >{req.status}</span
+                                                    >
+                                                {/if}
+                                            </div>
                                         </div>
                                         <p
-                                            class="text-xs text-txt-secondary mt-1.5"
+                                            class="text-xs text-txt-secondary mt-2 leading-relaxed"
                                         >
                                             {req.description}
                                         </p>
-                                        <p
-                                            class="text-[10px] text-txt-faint mt-1"
+
+                                        <!-- Acceptance Criteria -->
+                                        {#if req.acceptance_criteria?.length}
+                                            <div
+                                                class="mt-3 bg-white rounded-lg p-3 border border-surface-200/40"
+                                            >
+                                                <span
+                                                    class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.15em] block mb-1.5"
+                                                    >Acceptance Criteria</span
+                                                >
+                                                <ul class="space-y-1">
+                                                    {#each req.acceptance_criteria as ac}
+                                                        <li
+                                                            class="text-[11px] text-txt-secondary flex items-start gap-2"
+                                                        >
+                                                            <span
+                                                                class="text-emerald-500 mt-0.5"
+                                                                >✓</span
+                                                            >
+                                                            {ac}
+                                                        </li>
+                                                    {/each}
+                                                </ul>
+                                            </div>
+                                        {/if}
+
+                                        <!-- Meta row -->
+                                        <div
+                                            class="flex flex-wrap items-center gap-3 mt-3 pt-2 border-t border-surface-200/40"
                                         >
-                                            Raised by: {req.raised_by ||
-                                                "Unknown"}
-                                        </p>
+                                            {#if req.raised_by}
+                                                <span
+                                                    class="text-[10px] text-txt-faint"
+                                                    >👤 {req.raised_by}</span
+                                                >
+                                            {/if}
+                                            {#if req.dependencies?.length}
+                                                <span
+                                                    class="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"
+                                                    >🔗 Depends on: {req.dependencies.join(
+                                                        ", ",
+                                                    )}</span
+                                                >
+                                            {/if}
+                                            {#if req.risk}
+                                                <span
+                                                    class="text-[10px] text-red-600 bg-red-50 px-2 py-0.5 rounded-full"
+                                                    >⚠️ {req.risk}</span
+                                                >
+                                            {/if}
+                                        </div>
+
+                                        <!-- Implementation Notes -->
+                                        {#if req.implementation_notes}
+                                            <p
+                                                class="text-[10px] text-indigo-600 bg-indigo-50 rounded-md px-3 py-1.5 mt-2"
+                                            >
+                                                💡 {req.implementation_notes}
+                                            </p>
+                                        {/if}
                                     </div>
                                 {/each}
                             </div>
@@ -1092,32 +1430,59 @@
                     <!-- Non-Functional Requirements -->
                     {#if reqData.non_functional_requirements?.length}
                         <div class="mb-6">
-                            <span
-                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-3"
-                                >Non-Functional Requirements</span
-                            >
-                            <div class="grid md:grid-cols-2 gap-2">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span
+                                    class="text-[10px] font-bold text-purple-600 uppercase tracking-[0.15em]"
+                                    >Non-Functional Requirements</span
+                                >
+                                <span
+                                    class="text-[10px] font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full"
+                                    >{reqData.non_functional_requirements
+                                        .length}</span
+                                >
+                            </div>
+                            <div class="grid md:grid-cols-2 gap-3">
                                 {#each reqData.non_functional_requirements as nfr}
                                     <div
-                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60"
+                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60 hover:border-purple-300/60 transition-colors"
                                     >
-                                        <span
-                                            class="text-[10px] font-mono text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mr-2"
-                                            >{nfr.id}</span
+                                        <div
+                                            class="flex items-start justify-between gap-2 mb-1.5"
                                         >
-                                        <span
-                                            class="text-sm font-semibold text-txt-primary"
-                                            >{nfr.title}</span
-                                        >
+                                            <div>
+                                                <span
+                                                    class="text-[10px] font-mono text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mr-2"
+                                                    >{nfr.id}</span
+                                                >
+                                                <span
+                                                    class="text-sm font-semibold text-txt-primary"
+                                                    >{nfr.title}</span
+                                                >
+                                            </div>
+                                            <span
+                                                class="text-[10px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full shrink-0"
+                                                >{nfr.category}</span
+                                            >
+                                        </div>
                                         <p
-                                            class="text-xs text-txt-secondary mt-1.5"
+                                            class="text-xs text-txt-secondary mt-1.5 leading-relaxed"
                                         >
                                             {nfr.description}
                                         </p>
-                                        <span
-                                            class="text-[10px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full mt-1.5 inline-block"
-                                            >{nfr.category}</span
-                                        >
+                                        {#if nfr.measurable_criteria}
+                                            <p
+                                                class="text-[10px] text-emerald-700 bg-emerald-50 rounded px-2 py-1 mt-2"
+                                            >
+                                                📏 {nfr.measurable_criteria}
+                                            </p>
+                                        {/if}
+                                        {#if nfr.impact}
+                                            <p
+                                                class="text-[10px] text-red-600 mt-1.5"
+                                            >
+                                                ⚠️ Impact: {nfr.impact}
+                                            </p>
+                                        {/if}
                                     </div>
                                 {/each}
                             </div>
@@ -1128,60 +1493,187 @@
                     {#if reqData.user_stories?.length}
                         <div class="mb-6">
                             <span
-                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-3"
+                                class="text-[10px] font-bold text-blue-600 uppercase tracking-[0.15em] block mb-3"
                                 >User Stories</span
                             >
-                            <div class="space-y-1.5">
+                            <div class="space-y-2">
                                 {#each reqData.user_stories as story}
                                     <div
-                                        class="bg-blue-50/50 rounded-lg p-3 border border-blue-100 text-sm text-blue-900 italic"
+                                        class="bg-blue-50/50 rounded-xl p-4 border border-blue-100"
                                     >
-                                        "{story}"
+                                        <p
+                                            class="text-sm text-blue-900 italic font-medium"
+                                        >
+                                            "{typeof story === "string"
+                                                ? story
+                                                : story.story}"
+                                        </p>
+                                        {#if story.acceptance_criteria?.length}
+                                            <div
+                                                class="mt-2 pt-2 border-t border-blue-100"
+                                            >
+                                                <span
+                                                    class="text-[9px] font-bold text-blue-500 uppercase tracking-[0.15em] block mb-1"
+                                                    >Acceptance Criteria</span
+                                                >
+                                                {#each story.acceptance_criteria as ac}
+                                                    <p
+                                                        class="text-[11px] text-blue-700 flex items-start gap-1.5"
+                                                    >
+                                                        <span
+                                                            class="text-blue-400"
+                                                            >✓</span
+                                                        >
+                                                        {ac}
+                                                    </p>
+                                                {/each}
+                                            </div>
+                                        {/if}
                                     </div>
                                 {/each}
                             </div>
                         </div>
                     {/if}
 
-                    <!-- Constraints & Open Questions -->
-                    <div class="grid md:grid-cols-2 gap-4">
+                    <!-- Risks -->
+                    {#if reqData.risks?.length}
+                        <div class="mb-6">
+                            <span
+                                class="text-[10px] font-bold text-red-600 uppercase tracking-[0.15em] block mb-3"
+                                >Risk Assessment</span
+                            >
+                            <div class="space-y-2">
+                                {#each reqData.risks as risk}
+                                    <div
+                                        class="bg-red-50/50 rounded-xl p-4 border border-red-100"
+                                    >
+                                        <div
+                                            class="flex items-start justify-between gap-3"
+                                        >
+                                            <p
+                                                class="text-sm text-txt-primary font-medium"
+                                            >
+                                                {risk.risk}
+                                            </p>
+                                            <div class="flex gap-1.5 shrink-0">
+                                                <span
+                                                    class="text-[9px] font-semibold px-2 py-0.5 rounded-full
+                                                    {risk.likelihood === 'high'
+                                                        ? 'text-red-700 bg-red-100'
+                                                        : risk.likelihood ===
+                                                            'medium'
+                                                          ? 'text-amber-700 bg-amber-100'
+                                                          : 'text-green-700 bg-green-100'}"
+                                                >
+                                                    L: {risk.likelihood}
+                                                </span>
+                                                <span
+                                                    class="text-[9px] font-semibold px-2 py-0.5 rounded-full
+                                                    {risk.impact === 'high'
+                                                        ? 'text-red-700 bg-red-100'
+                                                        : risk.impact ===
+                                                            'medium'
+                                                          ? 'text-amber-700 bg-amber-100'
+                                                          : 'text-green-700 bg-green-100'}"
+                                                >
+                                                    I: {risk.impact}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {#if risk.mitigation}
+                                            <p
+                                                class="text-[11px] text-emerald-700 mt-1.5"
+                                            >
+                                                🛡️ Mitigation: {risk.mitigation}
+                                            </p>
+                                        {/if}
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+
+                    <!-- Constraints, Assumptions, Open Questions grid -->
+                    <div class="grid md:grid-cols-3 gap-4">
                         {#if reqData.constraints?.length}
-                            <div>
+                            <div
+                                class="bg-amber-50/50 rounded-xl p-4 border border-amber-100"
+                            >
                                 <span
-                                    class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-2"
+                                    class="text-[10px] font-bold text-amber-600 uppercase tracking-[0.15em] block mb-2"
                                     >Constraints</span
                                 >
-                                <ul class="space-y-1">
+                                <ul class="space-y-2">
                                     {#each reqData.constraints as c}
+                                        <li class="text-xs text-txt-secondary">
+                                            <div class="flex items-start gap-2">
+                                                <span
+                                                    class="text-amber-500 mt-0.5 text-[8px]"
+                                                    >●</span
+                                                >
+                                                <div>
+                                                    <p>
+                                                        {typeof c === "string"
+                                                            ? c
+                                                            : c.constraint}
+                                                    </p>
+                                                    {#if c.type}<span
+                                                            class="text-[9px] text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded mt-1 inline-block"
+                                                            >{c.type}</span
+                                                        >{/if}
+                                                </div>
+                                            </div>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
+                        {/if}
+                        {#if reqData.assumptions?.length}
+                            <div
+                                class="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100"
+                            >
+                                <span
+                                    class="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.15em] block mb-2"
+                                    >Assumptions</span
+                                >
+                                <ul class="space-y-1.5">
+                                    {#each reqData.assumptions as a}
                                         <li
-                                            class="text-sm text-txt-secondary flex items-start gap-2"
+                                            class="text-xs text-txt-secondary flex items-start gap-2"
                                         >
                                             <span
-                                                class="text-amber-500 mt-1 text-[8px]"
+                                                class="text-indigo-400 mt-0.5 text-[8px]"
                                                 >●</span
                                             >
-                                            {c}
+                                            {a}
                                         </li>
                                     {/each}
                                 </ul>
                             </div>
                         {/if}
                         {#if reqData.open_questions?.length}
-                            <div>
+                            <div
+                                class="bg-sky-50/50 rounded-xl p-4 border border-sky-100"
+                            >
                                 <span
-                                    class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-2"
+                                    class="text-[10px] font-bold text-sky-600 uppercase tracking-[0.15em] block mb-2"
                                     >Open Questions</span
                                 >
-                                <ul class="space-y-1">
+                                <ul class="space-y-2">
                                     {#each reqData.open_questions as q}
-                                        <li
-                                            class="text-sm text-txt-secondary flex items-start gap-2"
-                                        >
-                                            <span
-                                                class="text-blue-500 mt-1 text-[8px]"
-                                                >●</span
-                                            >
-                                            {q}
+                                        <li class="text-xs text-txt-secondary">
+                                            <p class="font-medium">
+                                                {typeof q === "string"
+                                                    ? q
+                                                    : q.question}
+                                            </p>
+                                            {#if q.raised_by}
+                                                <p
+                                                    class="text-[10px] text-txt-faint mt-0.5"
+                                                >
+                                                    Asked by: {q.raised_by}
+                                                </p>
+                                            {/if}
                                         </li>
                                     {/each}
                                 </ul>
@@ -1204,8 +1696,9 @@
                             >Documentation</span
                         >
                         <p class="text-xs text-txt-faint">
-                            Generate structured meeting minutes and technical
-                            documentation.
+                            Generate comprehensive meeting minutes with
+                            technical details, decisions, and stakeholder
+                            impact.
                         </p>
                     </div>
                     <button
@@ -1233,7 +1726,8 @@
                             No documentation generated
                         </h3>
                         <p class="text-sm text-txt-faint">
-                            Click "Generate Docs" to create meeting minutes.
+                            Click "Generate Docs" to create comprehensive
+                            meeting minutes.
                         </p>
                         <p class="text-xs text-txt-faint mt-1">
                             This is optional — use for meetings that need formal
@@ -1241,32 +1735,92 @@
                         </p>
                     </div>
                 {:else}
-                    <!-- Objective -->
-                    {#if docData.objective}
+                    <!-- Executive Summary -->
+                    {#if docData.executive_summary}
                         <div
-                            class="mb-6 bg-emerald-50/50 rounded-xl p-4 border border-emerald-100"
+                            class="mb-6 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200/60"
                         >
                             <span
-                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-1"
-                                >Meeting Objective</span
+                                class="text-[10px] font-bold text-emerald-700 uppercase tracking-[0.15em] block mb-2"
+                                >Executive Summary</span
                             >
-                            <p class="text-sm text-txt-primary">
-                                {docData.objective}
+                            <p class="text-sm text-emerald-900 leading-relaxed">
+                                {docData.executive_summary}
                             </p>
                         </div>
                     {/if}
 
+                    <!-- Attendees + Objective row -->
+                    <div class="grid md:grid-cols-2 gap-4 mb-6">
+                        {#if docData.attendees?.length}
+                            <div
+                                class="bg-surface-50 rounded-xl p-4 border border-surface-200/60"
+                            >
+                                <span
+                                    class="text-[10px] font-bold text-blue-600 uppercase tracking-[0.15em] block mb-2"
+                                    >Attendees</span
+                                >
+                                <div class="space-y-1.5">
+                                    {#each docData.attendees as person}
+                                        <div class="flex items-center gap-2">
+                                            <div
+                                                class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700"
+                                            >
+                                                {(person.name || "?")
+                                                    .charAt(0)
+                                                    .toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <span
+                                                    class="text-sm font-medium text-txt-primary"
+                                                    >{person.name}</span
+                                                >
+                                                {#if person.role}
+                                                    <span
+                                                        class="text-[10px] text-txt-faint ml-1.5"
+                                                        >— {person.role}</span
+                                                    >
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        {/if}
+                        {#if docData.objective}
+                            <div
+                                class="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100"
+                            >
+                                <span
+                                    class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-1.5"
+                                    >Meeting Objective</span
+                                >
+                                <p
+                                    class="text-sm text-txt-primary leading-relaxed"
+                                >
+                                    {docData.objective}
+                                </p>
+                            </div>
+                        {/if}
+                    </div>
+
                     <!-- Topics Discussed -->
                     {#if docData.topics_discussed?.length}
                         <div class="mb-6">
-                            <span
-                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-3"
-                                >Topics Discussed</span
-                            >
+                            <div class="flex items-center gap-2 mb-3">
+                                <span
+                                    class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em]"
+                                    >Topics Discussed</span
+                                >
+                                <span
+                                    class="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full"
+                                    >{docData.topics_discussed.length}</span
+                                >
+                            </div>
                             <div class="space-y-3">
                                 {#each docData.topics_discussed as topic, i}
                                     <div
-                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60"
+                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60 hover:border-emerald-300/60 transition-colors"
                                     >
                                         <p
                                             class="text-sm font-semibold text-txt-primary flex items-center gap-2"
@@ -1278,19 +1832,45 @@
                                             {topic.topic}
                                         </p>
                                         <p
-                                            class="text-xs text-txt-secondary mt-1.5"
+                                            class="text-xs text-txt-secondary mt-2 leading-relaxed"
                                         >
                                             {topic.summary}
                                         </p>
-                                        {#if topic.speakers_involved?.length}
-                                            <p
-                                                class="text-[10px] text-txt-faint mt-1"
-                                            >
-                                                Speakers: {topic.speakers_involved.join(
-                                                    ", ",
-                                                )}
-                                            </p>
+
+                                        {#if topic.key_points?.length}
+                                            <div class="mt-2 ml-1">
+                                                {#each topic.key_points as kp}
+                                                    <p
+                                                        class="text-[11px] text-txt-secondary flex items-start gap-2 mt-1"
+                                                    >
+                                                        <span
+                                                            class="text-emerald-400 mt-0.5"
+                                                            >•</span
+                                                        >
+                                                        {kp}
+                                                    </p>
+                                                {/each}
+                                            </div>
                                         {/if}
+
+                                        <div
+                                            class="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-surface-200/40"
+                                        >
+                                            {#if topic.speakers_involved?.length}
+                                                <span
+                                                    class="text-[10px] text-txt-faint"
+                                                    >👥 {topic.speakers_involved.join(
+                                                        ", ",
+                                                    )}</span
+                                                >
+                                            {/if}
+                                            {#if topic.outcome}
+                                                <span
+                                                    class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"
+                                                    >✅ {topic.outcome}</span
+                                                >
+                                            {/if}
+                                        </div>
                                     </div>
                                 {/each}
                             </div>
@@ -1301,13 +1881,13 @@
                     {#if docData.technical_details?.length}
                         <div class="mb-6">
                             <span
-                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-3"
+                                class="text-[10px] font-bold text-indigo-600 uppercase tracking-[0.15em] block mb-3"
                                 >Technical Details</span
                             >
-                            <div class="space-y-2">
+                            <div class="space-y-3">
                                 {#each docData.technical_details as tech}
                                     <div
-                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60"
+                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60 hover:border-indigo-300/60 transition-colors"
                                     >
                                         <p
                                             class="text-sm font-semibold text-txt-primary"
@@ -1315,10 +1895,17 @@
                                             {tech.area}
                                         </p>
                                         <p
-                                            class="text-xs text-txt-secondary mt-1"
+                                            class="text-xs text-txt-secondary mt-1.5 leading-relaxed"
                                         >
                                             {tech.details}
                                         </p>
+                                        {#if tech.implementation_approach}
+                                            <p
+                                                class="text-[10px] text-indigo-700 bg-indigo-50 rounded-md px-3 py-1.5 mt-2"
+                                            >
+                                                🔧 {tech.implementation_approach}
+                                            </p>
+                                        {/if}
                                         {#if tech.tools_mentioned?.length}
                                             <div
                                                 class="flex flex-wrap gap-1 mt-2"
@@ -1341,13 +1928,13 @@
                     {#if docData.decisions_and_rationale?.length}
                         <div class="mb-6">
                             <span
-                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-3"
+                                class="text-[10px] font-bold text-violet-600 uppercase tracking-[0.15em] block mb-3"
                                 >Decisions & Rationale</span
                             >
-                            <div class="space-y-2">
+                            <div class="space-y-3">
                                 {#each docData.decisions_and_rationale as d}
                                     <div
-                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60"
+                                        class="bg-surface-50 rounded-xl p-4 border border-surface-200/60 hover:border-violet-300/60 transition-colors"
                                     >
                                         <p
                                             class="text-sm font-semibold text-txt-primary"
@@ -1355,7 +1942,7 @@
                                             {d.decision}
                                         </p>
                                         <p
-                                            class="text-xs text-txt-secondary mt-1"
+                                            class="text-xs text-txt-secondary mt-1.5 leading-relaxed"
                                         >
                                             <span
                                                 class="font-medium text-txt-muted"
@@ -1365,7 +1952,7 @@
                                         </p>
                                         {#if d.alternatives_discussed}
                                             <p
-                                                class="text-xs text-txt-faint mt-0.5"
+                                                class="text-xs text-txt-faint mt-1"
                                             >
                                                 <span class="font-medium"
                                                     >Alternatives:</span
@@ -1373,54 +1960,214 @@
                                                 {d.alternatives_discussed}
                                             </p>
                                         {/if}
+                                        <div
+                                            class="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-surface-200/40"
+                                        >
+                                            {#if d.decided_by}
+                                                <span
+                                                    class="text-[10px] text-txt-faint"
+                                                    >👤 {d.decided_by}</span
+                                                >
+                                            {/if}
+                                            {#if d.impact}
+                                                <span
+                                                    class="text-[10px] text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full"
+                                                    >📊 {d.impact}</span
+                                                >
+                                            {/if}
+                                        </div>
                                     </div>
                                 {/each}
                             </div>
                         </div>
                     {/if}
 
-                    <!-- Next Steps & Parking Lot -->
-                    <div class="grid md:grid-cols-2 gap-4">
-                        {#if docData.next_steps?.length}
-                            <div>
+                    <!-- Agreements & Disagreements -->
+                    <div class="grid md:grid-cols-2 gap-4 mb-6">
+                        {#if docData.agreements?.length}
+                            <div
+                                class="bg-green-50/50 rounded-xl p-4 border border-green-100"
+                            >
                                 <span
-                                    class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-2"
-                                    >Next Steps</span
+                                    class="text-[10px] font-bold text-green-600 uppercase tracking-[0.15em] block mb-2"
+                                    >✅ Agreements</span
                                 >
-                                <ul class="space-y-1">
-                                    {#each docData.next_steps as step}
+                                <ul class="space-y-1.5">
+                                    {#each docData.agreements as a}
                                         <li
-                                            class="text-sm text-txt-secondary flex items-start gap-2"
+                                            class="text-xs text-txt-secondary flex items-start gap-2"
                                         >
                                             <span
-                                                class="text-emerald-500 mt-1 text-[8px]"
+                                                class="text-green-500 mt-0.5 text-[8px]"
                                                 >●</span
                                             >
-                                            {step}
+                                            {a}
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
+                        {/if}
+                        {#if docData.disagreements?.length}
+                            <div
+                                class="bg-orange-50/50 rounded-xl p-4 border border-orange-100"
+                            >
+                                <span
+                                    class="text-[10px] font-bold text-orange-600 uppercase tracking-[0.15em] block mb-2"
+                                    >⚡ Disagreements</span
+                                >
+                                <ul class="space-y-2">
+                                    {#each docData.disagreements as dis}
+                                        <li class="text-xs text-txt-secondary">
+                                            <p class="font-medium">
+                                                {dis.topic}
+                                            </p>
+                                            {#if dis.parties?.length}
+                                                <p
+                                                    class="text-[10px] text-txt-faint mt-0.5"
+                                                >
+                                                    Between: {dis.parties.join(
+                                                        " vs ",
+                                                    )}
+                                                </p>
+                                            {/if}
+                                            {#if dis.resolution}
+                                                <p
+                                                    class="text-[10px] text-green-700 mt-0.5"
+                                                >
+                                                    Resolution: {dis.resolution}
+                                                </p>
+                                            {/if}
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <!-- Next Steps -->
+                    {#if docData.next_steps?.length}
+                        <div class="mb-6">
+                            <span
+                                class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-3"
+                                >Next Steps</span
+                            >
+                            <div class="space-y-2">
+                                {#each docData.next_steps as step}
+                                    <div
+                                        class="bg-surface-50 rounded-lg p-3 border border-surface-200/60 flex items-start justify-between gap-3"
+                                    >
+                                        <div class="flex items-start gap-2">
+                                            <span
+                                                class="text-emerald-500 mt-0.5 text-[8px]"
+                                                >●</span
+                                            >
+                                            <p
+                                                class="text-sm text-txt-secondary"
+                                            >
+                                                {typeof step === "string"
+                                                    ? step
+                                                    : step.action}
+                                            </p>
+                                        </div>
+                                        {#if step.owner || step.deadline}
+                                            <div
+                                                class="flex items-center gap-2 shrink-0"
+                                            >
+                                                {#if step.owner}
+                                                    <span
+                                                        class="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"
+                                                        >{step.owner}</span
+                                                    >
+                                                {/if}
+                                                {#if step.deadline}
+                                                    <span
+                                                        class="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full"
+                                                        >{step.deadline}</span
+                                                    >
+                                                {/if}
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+
+                    <!-- Stakeholder Impact + Parking Lot + Glossary -->
+                    <div class="grid md:grid-cols-3 gap-4">
+                        {#if docData.stakeholder_impact?.length}
+                            <div
+                                class="bg-purple-50/50 rounded-xl p-4 border border-purple-100"
+                            >
+                                <span
+                                    class="text-[10px] font-bold text-purple-600 uppercase tracking-[0.15em] block mb-2"
+                                    >Stakeholder Impact</span
+                                >
+                                <ul class="space-y-2">
+                                    {#each docData.stakeholder_impact as si}
+                                        <li class="text-xs text-txt-secondary">
+                                            <p
+                                                class="font-medium text-purple-800"
+                                            >
+                                                {si.stakeholder}
+                                            </p>
+                                            <p
+                                                class="text-[11px] text-txt-faint mt-0.5"
+                                            >
+                                                {si.impact}
+                                            </p>
                                         </li>
                                     {/each}
                                 </ul>
                             </div>
                         {/if}
                         {#if docData.parking_lot?.length}
-                            <div>
+                            <div
+                                class="bg-amber-50/50 rounded-xl p-4 border border-amber-100"
+                            >
                                 <span
-                                    class="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.15em] block mb-2"
+                                    class="text-[10px] font-bold text-amber-600 uppercase tracking-[0.15em] block mb-2"
                                     >Parking Lot</span
                                 >
-                                <ul class="space-y-1">
+                                <ul class="space-y-1.5">
                                     {#each docData.parking_lot as item}
                                         <li
-                                            class="text-sm text-txt-secondary flex items-start gap-2"
+                                            class="text-xs text-txt-secondary flex items-start gap-2"
                                         >
                                             <span
-                                                class="text-amber-500 mt-1 text-[8px]"
+                                                class="text-amber-500 mt-0.5 text-[8px]"
                                                 >●</span
                                             >
                                             {item}
                                         </li>
                                     {/each}
                                 </ul>
+                            </div>
+                        {/if}
+                        {#if docData.glossary?.length}
+                            <div
+                                class="bg-slate-50/50 rounded-xl p-4 border border-slate-200"
+                            >
+                                <span
+                                    class="text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] block mb-2"
+                                    >Glossary</span
+                                >
+                                <dl class="space-y-1.5">
+                                    {#each docData.glossary as g}
+                                        <div>
+                                            <dt
+                                                class="text-xs font-semibold text-txt-primary"
+                                            >
+                                                {g.term}
+                                            </dt>
+                                            <dd
+                                                class="text-[11px] text-txt-faint"
+                                            >
+                                                {g.definition}
+                                            </dd>
+                                        </div>
+                                    {/each}
+                                </dl>
                             </div>
                         {/if}
                     </div>

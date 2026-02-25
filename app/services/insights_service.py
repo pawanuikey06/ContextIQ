@@ -37,7 +37,7 @@ class MeetingInsightsService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            max_tokens=2048,
+            max_tokens=4096,
             temperature=0.2,
         )
         return response.choices[0].message.content.strip()
@@ -89,39 +89,65 @@ class MeetingInsightsService:
 
         transcript_text, _ = self._load_transcript_text(meeting_id)
 
-        system_prompt = """You are an expert meeting analyst. Extract structured insights from the meeting transcript.
+        system_prompt = """You are a senior project manager with 15+ years of experience. Extract ALL action items, decisions, and insights from the meeting transcript with thorough detail.
 
 Return a JSON object with EXACTLY this format (no markdown, no code fences, just raw JSON):
 {
   "action_items": [
     {
-      "task": "Description of the task",
+      "task": "Detailed description of what needs to be done — be specific and elaborate. Include context about WHY this task matters.",
       "assigned_to": "Person name or 'Unassigned'",
       "deadline": "Mentioned deadline or 'Not specified'",
-      "priority": "high/medium/low"
+      "priority": "high/medium/low",
+      "category": "development/design/research/communication/testing/documentation/infrastructure/other",
+      "context": "Brief context of why this task was discussed and what problem it solves",
+      "success_criteria": "How to know this task is complete",
+      "dependencies": ["Other tasks or prerequisites this depends on"],
+      "mentioned_by": "Who raised or proposed this task"
     }
   ],
   "decisions": [
     {
-      "decision": "What was decided",
+      "decision": "What was decided — be detailed and specific",
       "made_by": "Who made or proposed it",
-      "context": "Brief context of why"
+      "context": "Brief context of why this decision was needed",
+      "impact": "Expected impact or consequence of this decision",
+      "alternatives_considered": "Any alternative options that were discussed before reaching this decision"
     }
   ],
   "key_takeaways": [
-    "Important point 1",
-    "Important point 2"
+    {
+      "takeaway": "Important insight or highlight from the meeting",
+      "category": "technical/strategic/operational/risk",
+      "importance": "high/medium/low"
+    }
   ],
   "follow_ups": [
-    "Thing that needs follow-up"
+    {
+      "item": "What needs follow-up",
+      "owner": "Person responsible for following up",
+      "urgency": "immediate/this-week/next-meeting",
+      "context": "Why this needs follow-up"
+    }
+  ],
+  "risks_identified": [
+    {
+      "risk": "Potential risk or blocker mentioned",
+      "impact": "high/medium/low",
+      "mitigation": "Any proposed mitigation discussed"
+    }
   ]
 }
 
 RULES:
-1. Only extract REAL action items explicitly mentioned or clearly implied
-2. If no action items exist, return empty arrays
-3. Assign priority based on urgency language ("ASAP"=high, "when you can"=low)
-4. Return ONLY valid JSON, nothing else"""
+1. Extract REAL action items — both explicitly stated AND clearly implied from the discussion
+2. Be ELABORATE and DETAILED — minimum 2 sentences per task description
+3. Infer reasonable deadlines from context clues (e.g., "by next sprint", "ASAP")
+4. Assign priority based on urgency language ("ASAP"=high, "when you can"=low, "important"=medium)
+5. Categorize each action item by type (development, design, testing, etc.)
+6. If someone volunteers or is asked to do something, capture it as an action item
+7. Look for implicit action items (e.g., "we should probably..." or "someone needs to...")
+8. Return ONLY valid JSON, nothing else"""
 
         user_prompt = f"MEETING TRANSCRIPT:\n\n{transcript_text}"
 
@@ -143,8 +169,9 @@ RULES:
             result = {
                 "action_items": [],
                 "decisions": [],
-                "key_takeaways": [raw_response[:500]],
+                "key_takeaways": [],
                 "follow_ups": [],
+                "risks_identified": [],
             }
 
         result["meeting_id"] = meeting_id
@@ -376,44 +403,79 @@ RULES:
 
         transcript_text, _ = self._load_transcript_text(meeting_id)
 
-        system_prompt = """You are a senior business analyst. Extract all requirements discussed in this meeting transcript.
+        system_prompt = """You are a senior business analyst with 15+ years of experience in requirements engineering. Extract ALL requirements discussed in this meeting transcript with thorough detail.
 
 Return a JSON object with EXACTLY this format (no markdown, no code fences, just raw JSON):
 {
+  "summary": "2-3 sentence overview of what this meeting requires",
   "functional_requirements": [
     {
       "id": "FR-001",
-      "title": "Short title",
-      "description": "Detailed description of the requirement",
+      "title": "Short descriptive title",
+      "description": "Detailed description of the requirement — be specific and elaborate. Include context about WHY this is needed, WHAT problem it solves, and HOW it should work.",
+      "acceptance_criteria": ["Testable condition 1 that proves this requirement is met", "Testable condition 2"],
       "priority": "must-have/should-have/nice-to-have",
-      "raised_by": "Person name",
-      "status": "proposed"
+      "priority_rationale": "Why this priority level was assigned",
+      "raised_by": "Person name who raised or proposed this",
+      "agreed_by": ["Names of people who agreed"],
+      "status": "proposed/agreed/needs-discussion",
+      "dependencies": ["FR-002"],
+      "implementation_notes": "Any technical implementation hints discussed",
+      "risk": "What could go wrong if this isn't implemented or is implemented incorrectly"
     }
   ],
   "non_functional_requirements": [
     {
       "id": "NFR-001",
       "title": "Short title",
-      "description": "Description",
-      "category": "performance/security/scalability/usability/reliability"
+      "description": "Detailed description of the non-functional requirement",
+      "category": "performance/security/scalability/usability/reliability/compliance",
+      "measurable_criteria": "How to measure if this NFR is met (e.g. response time < 2s)",
+      "impact": "What happens if this NFR is not met"
     }
   ],
   "user_stories": [
-    "As a [role], I want [feature], so that [benefit]"
+    {
+      "story": "As a [specific role], I want [specific feature/capability], so that [specific business benefit]",
+      "acceptance_criteria": ["Given X, When Y, Then Z"]
+    }
   ],
   "constraints": [
-    "Budget, timeline, or technical constraint mentioned"
+    {
+      "constraint": "Description of the constraint",
+      "type": "budget/timeline/technical/resource/regulatory",
+      "impact": "How this constraint affects the project"
+    }
+  ],
+  "assumptions": [
+    "Assumption made during the discussion that needs validation"
+  ],
+  "risks": [
+    {
+      "risk": "Description of the risk",
+      "likelihood": "high/medium/low",
+      "impact": "high/medium/low",
+      "mitigation": "Proposed mitigation if discussed"
+    }
   ],
   "open_questions": [
-    "Unresolved question that needs follow-up"
+    {
+      "question": "Unresolved question",
+      "raised_by": "Person who raised it",
+      "needs_answer_from": "Who should answer this"
+    }
   ]
 }
 
 RULES:
 1. Only extract REAL requirements explicitly discussed — do not invent
-2. If this meeting has no requirements, return empty arrays
-3. Use auto-incrementing IDs (FR-001, FR-002, NFR-001, etc.)
-4. Return ONLY valid JSON, nothing else"""
+2. Be ELABORATE and DETAILED in descriptions — write 2-3 sentences minimum per requirement
+3. If this meeting has no requirements, return empty arrays
+4. Use auto-incrementing IDs (FR-001, FR-002, NFR-001, etc.)
+5. Extract implicit requirements too (e.g. if someone says 'we need it to be fast', that's a performance NFR)
+6. Map dependencies between requirements where they exist
+7. Include ALL acceptance criteria you can derive from the discussion
+8. Return ONLY valid JSON, nothing else"""
 
         user_prompt = f"MEETING TRANSCRIPT:\n\n{transcript_text}"
 
@@ -430,11 +492,14 @@ RULES:
         except json.JSONDecodeError:
             logger.warning("[%s] LLM returned non-JSON for requirements", meeting_id)
             result = {
+                "summary": "",
                 "functional_requirements": [],
                 "non_functional_requirements": [],
                 "user_stories": [],
                 "constraints": [],
-                "open_questions": [raw_response[:500]],
+                "assumptions": [],
+                "risks": [],
+                "open_questions": [{"question": raw_response[:500], "raised_by": "", "needs_answer_from": ""}],
             }
 
         result["meeting_id"] = meeting_id
@@ -477,47 +542,89 @@ RULES:
                 meta = json.load(f)
             title = meta.get("auto_title", meta.get("title", title))
 
-        system_prompt = """You are a technical writer creating formal meeting documentation (Minutes of Meeting).
+        system_prompt = """You are a senior technical writer creating comprehensive, formal meeting documentation (Minutes of Meeting). Your documentation should be THOROUGH and ELABORATE — not just bullet points but detailed narrative descriptions.
 
 Return a JSON object with EXACTLY this format (no markdown, no code fences, just raw JSON):
 {
   "title": "Meeting title",
-  "objective": "What was the purpose of this meeting",
+  "executive_summary": "A comprehensive 3-5 sentence executive summary covering the purpose of the meeting, key discussion points, major decisions made, and the overall outcome. This should be detailed enough that someone who missed the meeting can understand what happened.",
+  "attendees": [
+    {
+      "name": "Person name",
+      "role": "Their role/title as inferred from discussion (e.g. IT Head, Revenue Manager, Project Lead)"
+    }
+  ],
+  "objective": "Detailed description of the meeting's purpose — what problem was being addressed and why a meeting was needed",
   "topics_discussed": [
     {
       "topic": "Topic name",
-      "summary": "Key points discussed under this topic",
-      "speakers_involved": ["Person 1", "Person 2"]
+      "summary": "Detailed 3-5 sentence summary of what was discussed under this topic. Include specific numbers, data points, examples mentioned. Don't just list facts — explain the flow of discussion.",
+      "key_points": ["Specific point 1 with details", "Specific point 2 with details"],
+      "speakers_involved": ["Person 1", "Person 2"],
+      "outcome": "What was the conclusion or result of this discussion topic"
     }
   ],
   "technical_details": [
     {
       "area": "Technical area discussed",
-      "details": "Technical details, architecture decisions, implementation notes",
-      "tools_mentioned": ["Tool 1", "Tool 2"]
+      "details": "Detailed technical description — include system names, integration points, architecture decisions, implementation approaches. Be specific.",
+      "tools_mentioned": ["Tool 1", "Tool 2"],
+      "implementation_approach": "How the team plans to implement this technically"
     }
   ],
   "decisions_and_rationale": [
     {
-      "decision": "What was decided",
-      "rationale": "Why this decision was made",
-      "alternatives_discussed": "Other options that were considered"
+      "decision": "Clear statement of what was decided",
+      "rationale": "Detailed explanation of WHY this decision was made — what factors were considered",
+      "alternatives_discussed": "Other options that were considered and why they were rejected",
+      "decided_by": "Who made or proposed the final decision",
+      "impact": "What impact this decision will have"
+    }
+  ],
+  "agreements": [
+    "Specific agreement reached between participants"
+  ],
+  "disagreements": [
+    {
+      "topic": "What was the disagreement about",
+      "parties": ["Person 1", "Person 2"],
+      "resolution": "How it was resolved or if it's still open"
     }
   ],
   "next_steps": [
-    "Clear next step with owner if mentioned"
+    {
+      "action": "Clear description of what needs to be done",
+      "owner": "Person responsible",
+      "deadline": "When it should be done if mentioned"
+    }
+  ],
+  "stakeholder_impact": [
+    {
+      "stakeholder": "Who is affected (team, department, client, etc.)",
+      "impact": "How they are affected by the decisions made"
+    }
   ],
   "parking_lot": [
-    "Items deferred for future discussion"
+    "Items deferred for future discussion with context on why they were deferred"
+  ],
+  "glossary": [
+    {
+      "term": "Technical term or acronym used",
+      "definition": "What it means in context"
+    }
   ]
 }
 
 RULES:
-1. Be thorough — capture all key discussion points
-2. Group by topics logically
-3. Include technical details where discussed
-4. If a section has no content, return an empty array
-5. Return ONLY valid JSON, nothing else"""
+1. Be THOROUGH and ELABORATE — write detailed descriptions, not one-liners
+2. Group by topics logically and chronologically
+3. Include ALL technical details discussed with specific system/tool names
+4. Capture the FLOW of conversation — who said what and how the discussion evolved
+5. Include specific numbers, dates, and data points mentioned
+6. Extract ALL attendees and infer their roles from the conversation
+7. If a section has no content, return an empty array
+8. The executive_summary should be comprehensive enough to stand alone
+9. Return ONLY valid JSON, nothing else"""
 
         user_prompt = f"MEETING TITLE: {title}\n\nMEETING TRANSCRIPT:\n\n{transcript_text}"
 
@@ -535,12 +642,18 @@ RULES:
             logger.warning("[%s] LLM returned non-JSON for docs", meeting_id)
             result = {
                 "title": title,
+                "executive_summary": "",
+                "attendees": [],
                 "objective": "",
                 "topics_discussed": [],
                 "technical_details": [],
                 "decisions_and_rationale": [],
+                "agreements": [],
+                "disagreements": [],
                 "next_steps": [],
+                "stakeholder_impact": [],
                 "parking_lot": [],
+                "glossary": [],
             }
 
         result["meeting_id"] = meeting_id

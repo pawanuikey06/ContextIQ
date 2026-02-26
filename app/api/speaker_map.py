@@ -1,11 +1,13 @@
 """
 POST/GET /meeting/{meeting_id}/speaker-map
 Save and retrieve speaker name mappings (HITL feature).
+After saving, automatically regenerates ALL AI insights in the background
+using the real speaker names (summary, action items, requirements, docs, email, RAG).
 """
 import json
 import logging
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict
 
@@ -20,9 +22,105 @@ class SpeakerMapRequest(BaseModel):
     speaker_map: Dict[str, str]  # e.g. {"SPEAKER_00": "Pawan", "SPEAKER_01": "Ravi"}
 
 
+def _regenerate_all_insights(meeting_id: str):
+    """
+    Background task: re-run ALL AI insights + RAG index with mapped speaker names.
+    Runs force=True so cached results are discarded and rebuilt with real names.
+    """
+    logger.info("[%s] 🔄 Background regeneration started with mapped speaker names", meeting_id)
+
+    transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
+    if not transcript_path.exists():
+        logger.warning("[%s] Transcript not found, skipping regeneration", meeting_id)
+        return
+
+    # ── 1. Re-index RAG (uses speaker_map for chunk content) ──
+    try:
+        from app.api.chat import _get_rag_service
+        rag = _get_rag_service()
+        count = rag.ingest_meeting(meeting_id)
+        logger.info("[%s] ✅ RAG re-indexed: %d chunks with mapped names", meeting_id, count)
+    except Exception as e:
+        logger.warning("[%s] RAG re-index failed: %s", meeting_id, e)
+
+    # ── 2. Re-generate Summary (force=True → rebuilds with mapped names) ──
+    try:
+        from app.services.summary_service import MeetingSummaryService
+        svc = MeetingSummaryService()
+        svc.summarize(meeting_id, force=True)
+        logger.info("[%s] ✅ Summary regenerated with mapped names", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] Summary regeneration failed: %s", meeting_id, e)
+
+    # ── 3. Re-extract Action Items + Decisions ──
+    try:
+        from app.services.insights_service import MeetingInsightsService
+        insights = MeetingInsightsService()
+        insights.extract_action_items(meeting_id, force=True)
+        logger.info("[%s] ✅ Action items regenerated with mapped names", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] Action items regeneration failed: %s", meeting_id, e)
+
+    # ── 4. Re-extract Requirements ──
+    try:
+        from app.services.insights_service import MeetingInsightsService
+        insights = MeetingInsightsService()
+        insights.extract_requirements(meeting_id, force=True)
+        logger.info("[%s] ✅ Requirements regenerated with mapped names", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] Requirements regeneration failed: %s", meeting_id, e)
+
+    # ── 5. Re-generate Documentation ──
+    try:
+        from app.services.insights_service import MeetingInsightsService
+        insights = MeetingInsightsService()
+        insights.generate_documentation(meeting_id, force=True)
+        logger.info("[%s] ✅ Documentation regenerated with mapped names", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] Documentation regeneration failed: %s", meeting_id, e)
+
+    # ── 6. Re-generate Follow-up Email ──
+    try:
+        from app.services.insights_service import MeetingInsightsService
+        insights = MeetingInsightsService()
+        insights.generate_followup_email(meeting_id, force=True)
+        logger.info("[%s] ✅ Follow-up email regenerated with mapped names", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] Follow-up email regeneration failed: %s", meeting_id, e)
+
+    # ── 7. Re-run Sentiment Analysis ──
+    try:
+        from app.services.insights_service import MeetingInsightsService
+        insights = MeetingInsightsService()
+        insights.analyze_sentiment(meeting_id, force=True)
+        logger.info("[%s] ✅ Sentiment analysis regenerated with mapped names", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] Sentiment regeneration failed: %s", meeting_id, e)
+
+    # ── 8. Re-extract Topic Segments ──
+    try:
+        from app.services.insights_service import MeetingInsightsService
+        insights = MeetingInsightsService()
+        insights.extract_topics(meeting_id, force=True)
+        logger.info("[%s] ✅ Topics regenerated with mapped names", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] Topics regeneration failed: %s", meeting_id, e)
+
+    logger.info("[%s] 🎉 Background regeneration complete — all insights updated with real speaker names", meeting_id)
+
+
 @router.post("/meeting/{meeting_id}/speaker-map")
-async def save_speaker_map(meeting_id: str, body: SpeakerMapRequest):
-    """Save speaker name mappings to disk."""
+async def save_speaker_map(
+    meeting_id: str,
+    body: SpeakerMapRequest,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Save speaker name mappings to disk.
+    Automatically triggers background regeneration of ALL AI insights
+    (summary, action items, requirements, docs, email, sentiment, RAG index)
+    using the mapped names. Returns immediately — regeneration runs in background.
+    """
     meeting_dir = STORAGE_DIR / meeting_id
     if not meeting_dir.exists():
         raise HTTPException(status_code=404, detail=f"Meeting {meeting_id} not found")
@@ -33,18 +131,15 @@ async def save_speaker_map(meeting_id: str, body: SpeakerMapRequest):
 
     logger.info("[%s] Speaker map saved: %s", meeting_id, body.speaker_map)
 
-    # Auto-reindex in RAG so chat uses mapped names
-    try:
-        from app.api.chat import _get_rag_service
-        rag = _get_rag_service()
-        transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
-        if transcript_path.exists():
-            count = rag.ingest_meeting(meeting_id)
-            logger.info("[%s] Auto-reindexed with speaker names: %d chunks", meeting_id, count)
-    except Exception as e:
-        logger.warning("[%s] Auto-reindex after speaker map failed: %s", meeting_id, e)
+    # Queue background regeneration of all insights
+    background_tasks.add_task(_regenerate_all_insights, meeting_id)
 
-    return {"success": True, "speaker_map": body.speaker_map}
+    return {
+        "success": True,
+        "speaker_map": body.speaker_map,
+        "regenerating": True,
+        "message": "Speaker names saved. All insights are being regenerated in the background with the mapped names.",
+    }
 
 
 @router.get("/meeting/{meeting_id}/speaker-map")

@@ -152,6 +152,7 @@ class MeetingRAGService:
         Retrieve chunks across ALL indexed meetings.
         Fetches fetch_k candidates, groups by meeting, then round-robins
         so every meeting is represented in the context.
+        Auto-recovers from corrupted ChromaDB by re-indexing.
         """
         from collections import defaultdict
 
@@ -163,7 +164,21 @@ class MeetingRAGService:
             search_type="similarity",
             search_kwargs=search_kwargs,
         )
-        all_docs = retriever.invoke(question)
+
+        try:
+            all_docs = retriever.invoke(question)
+        except Exception as e:
+            if "Error finding id" in str(e) or "InvalidDimensionException" in str(e):
+                logger.warning("ChromaDB index corrupted, rebuilding: %s", e)
+                self._rebuild_index()
+                # Retry after rebuild
+                retriever = self._vectorstore.as_retriever(
+                    search_type="similarity",
+                    search_kwargs=search_kwargs,
+                )
+                all_docs = retriever.invoke(question)
+            else:
+                raise
 
         # Group by meeting
         by_meeting = defaultdict(list)
@@ -187,6 +202,39 @@ class MeetingRAGService:
             idx += 1
 
         return diverse
+
+    def _rebuild_index(self):
+        """Nuke the ChromaDB collection and re-index all meetings."""
+        import shutil
+        from langchain_chroma import Chroma
+
+        logger.info("Rebuilding ChromaDB index from scratch...")
+        # Delete ChromaDB directory
+        if CHROMA_DIR.exists():
+            shutil.rmtree(CHROMA_DIR, ignore_errors=True)
+
+        # Recreate vectorstore
+        self._vectorstore = Chroma(
+            collection_name="meetings",
+            embedding_function=self._embeddings,
+            persist_directory=str(CHROMA_DIR),
+        )
+
+        # Re-index all meetings that have transcripts
+        count = 0
+        for meeting_dir in STORAGE_DIR.iterdir():
+            if not meeting_dir.is_dir() or meeting_dir.name.startswith(".") or meeting_dir.name == "chroma_db":
+                continue
+            transcript = meeting_dir / "transcript.json"
+            if transcript.exists():
+                try:
+                    n = self.ingest_meeting(meeting_dir.name)
+                    count += n
+                    logger.info("Re-indexed %s (%d segments)", meeting_dir.name, n)
+                except Exception as ex:
+                    logger.error("Failed to re-index %s: %s", meeting_dir.name, ex)
+
+        logger.info("Rebuild complete: %d total segments indexed", count)
 
     # ------------------------------------------------------------------
     # Query

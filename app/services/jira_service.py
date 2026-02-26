@@ -24,11 +24,11 @@ PRIORITY_MAP = {
 
 # Map ContextIQ category to Jira issue type
 ISSUE_TYPE_MAP = {
-    "development": "Task",
+    "development": "Story",
     "design": "Task",
     "research": "Task",
     "communication": "Task",
-    "testing": "Task",
+    "testing": "Bug",
     "documentation": "Task",
     "infrastructure": "Task",
     "other": "Task",
@@ -291,9 +291,10 @@ def update_ticket(ticket_key: str, action_item: dict) -> dict:
             logger.error("Jira transition request failed: %s", str(e))
 
     return {
-        "success": len(updated_fields) > 0,
+        "success": len(updated_fields) > 0 or bool(status),
         "key": ticket_key,
         "updated_fields": updated_fields,
+        "message": f"Updated: {', '.join(updated_fields)}" if updated_fields else "No changes needed or no matching transition found",
     }
 
 

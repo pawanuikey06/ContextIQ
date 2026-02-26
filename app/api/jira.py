@@ -58,13 +58,13 @@ async def push_to_jira(meeting_id: str, body: JiraPushRequest = JiraPushRequest(
     if not items:
         raise HTTPException(status_code=404, detail="No action items to push.")
 
-    # Load meeting title
+    # Load meeting title — prefer auto_title (AI-generated) over generic title
     meeting_title = f"Meeting {meeting_id[:8]}"
     meta_path = STORAGE_DIR / meeting_id / "metadata.json"
     if meta_path.exists():
         with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
-            meeting_title = meta.get("title", meeting_title)
+            meeting_title = meta.get("auto_title", meta.get("title", meeting_title))
 
     # Filter by indices if specified
     if body.indices is not None:
@@ -81,16 +81,16 @@ async def push_to_jira(meeting_id: str, body: JiraPushRequest = JiraPushRequest(
     # Push to Jira
     result = create_tickets_batch(items_to_push, meeting_title)
 
-    # Save Jira IDs back to action items
+    # Save Jira IDs back into action_items using index matching (not text matching)
     if result["created"] > 0:
-        for ticket_info in result["tickets"]:
+        # Build a map: original item index → ticket result
+        selected_indices = body.indices if body.indices is not None else list(range(len(items)))
+        valid_indices = [i for i in selected_indices if 0 <= i < len(items)]
+        ticket_list = result.get("tickets", [])
+        for orig_idx, ticket_info in zip(valid_indices, ticket_list):
             if ticket_info.get("success") and ticket_info.get("key"):
-                # Find the matching action item and save Jira ID
-                task_text = ticket_info.get("task", "")
-                for item in action_data.get("action_items", []):
-                    if item.get("task", "")[:80] == task_text and not item.get("jira_id"):
-                        item["jira_id"] = ticket_info["key"]
-                        break
+                action_data["action_items"][orig_idx]["jira_id"] = ticket_info["key"]
+                action_data["action_items"][orig_idx]["jira_url"] = ticket_info.get("url", "")
 
         # Save updated action items back
         with open(ai_path, "w", encoding="utf-8") as f:
@@ -126,7 +126,15 @@ async def sync_from_jira(meeting_id: str):
     if not jira_items:
         return {"synced": 0, "message": "No items linked to Jira."}
 
-    result = sync_tickets(items)
+    # Pass only items that have Jira IDs — avoids wasted API calls
+    result = sync_tickets(jira_items)
+
+    # Merge synced data back into full action_data list
+    jira_map = {item["jira_id"]: item for item in jira_items if item.get("jira_id")}
+    for item in action_data.get("action_items", []):
+        jid = item.get("jira_id")
+        if jid and jid in jira_map:
+            item.update(jira_map[jid])
 
     # Save updated data back
     with open(ai_path, "w", encoding="utf-8") as f:

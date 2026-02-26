@@ -290,3 +290,270 @@ flowchart TD
 | `/meeting/:id/actions` | ActionItems.svelte | Tasks + Jira + follow-up email |
 | `/chat` | Chat.svelte | RAG chatbot |
 | `/search` | Search.svelte | Keyword search |
+
+---
+
+## 10. Entity Relationship — Data Model
+
+```mermaid
+erDiagram
+    MEETING ||--o{ SEGMENT : "has many"
+    MEETING ||--o| METADATA : "has one"
+    MEETING ||--o| SPEAKER_MAP : "has one"
+    MEETING ||--o| SUMMARY : "has one"
+    MEETING ||--o| ACTION_ITEMS : "has one"
+    MEETING ||--o| REQUIREMENTS : "has one"
+    MEETING ||--o| DOCUMENTATION : "has one"
+    MEETING ||--o| SENTIMENT : "has one"
+    MEETING ||--o| TOPICS : "has one"
+    MEETING ||--o| FOLLOWUP_EMAIL : "has one"
+    MEETING ||--o| SPEAKER_REPORT : "has one"
+    ACTION_ITEMS ||--o{ JIRA_TICKET : "links to"
+
+    MEETING {
+        string meeting_id PK
+        string audio_path
+    }
+    SEGMENT {
+        string speaker
+        string text
+        float start
+        float end
+    }
+    METADATA {
+        string auto_title
+        string status
+        string processed_at
+        int segment_count
+        int speaker_count
+    }
+    SPEAKER_MAP {
+        string SPEAKER_00 "Real Name"
+        string SPEAKER_01 "Real Name"
+    }
+    SUMMARY {
+        string overall_summary_en
+        string overall_summary_hi
+        object speaker_summaries_en
+    }
+    ACTION_ITEMS {
+        array action_items
+        array decisions
+        array key_takeaways
+        array follow_ups
+    }
+    JIRA_TICKET {
+        string jira_id
+        string jira_url
+        string status
+        string priority
+    }
+```
+
+---
+
+## 11. Meeting Lifecycle — State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Uploaded: POST /upload-video
+    Uploaded --> Transcribing: POST /transcribe/{id}
+    Transcribing --> Transcribed: WhisperX complete
+    Transcribed --> TitleGenerated: Auto-title (background)
+    TitleGenerated --> RAGIndexed: Auto-index (background)
+
+    RAGIndexed --> SpeakersMapped: User maps names (HITL)
+    SpeakersMapped --> Regenerating: Background regeneration
+
+    Regenerating --> SummaryReady: Summary generated
+    SummaryReady --> InsightsReady: Action items + requirements + docs
+
+    InsightsReady --> Published: PDF + Email + Teams
+    InsightsReady --> JiraSynced: Push to Jira
+
+    state InsightsReady {
+        [*] --> ActionItems
+        [*] --> Requirements
+        [*] --> Documentation
+        [*] --> Sentiment
+        [*] --> Topics
+        [*] --> FollowupEmail
+    }
+
+    Published --> [*]
+    JiraSynced --> BidirectionalSync: Sync from Jira
+    BidirectionalSync --> JiraSynced
+```
+
+---
+
+## 12. User Journey — Complete Workflow
+
+```mermaid
+flowchart TD
+    A["🎬 User uploads video"] --> B["⏳ Processing<br/>Audio extraction + Transcription"]
+    B --> C["📜 View Transcript<br/>Chat / Speaker / Timeline views"]
+    C --> D["👤 Map Speaker Names<br/>HITL: SPEAKER_00 → Babu JI"]
+    D --> E["🔄 Auto-Regeneration<br/>8 tasks in background"]
+    E --> F{"Choose Action"}
+
+    F --> G["📝 View Summary<br/>English + Hindi"]
+    F --> H["✅ View Action Items<br/>Review tasks + decisions"]
+    F --> I["💬 Chat with AI<br/>Ask questions about meetings"]
+    F --> J["📊 View Analytics<br/>Speaker stats + sentiment"]
+
+    H --> K{"Push to Jira?"}
+    K -->|Yes| L["🎫 Create Jira Tickets<br/>Auto-mapped fields"]
+    K -->|No| M["Continue"]
+
+    L --> N["🔄 Bidirectional Sync<br/>Status stays in sync"]
+
+    G --> O{"Publish?"}
+    O -->|PDF| P["📄 Download PDF"]
+    O -->|Email| Q["📧 Send via SMTP"]
+    O -->|Teams| R["💬 Rich Adaptive Card"]
+    O -->|Follow-up| S["💌 Follow-up Email"]
+
+    I --> T["📚 Cross-meeting Q&A<br/>RAG with citations"]
+
+    style D fill:#ffd700,stroke:#333
+    style E fill:#ff6b6b,stroke:#333
+    style L fill:#0052CC,stroke:#333
+    style T fill:#10b981,stroke:#333
+```
+
+---
+
+## 13. Service Class Diagram
+
+```mermaid
+classDiagram
+    class VideoAudioConverter {
+        -ffmpeg_path: str
+        +video_to_audio(video_path, audio_path)
+    }
+
+    class AudioTranscriptionService {
+        -engine: str
+        -groq_client: Groq
+        -assembly_client: AssemblyAI
+        +transcribe(audio_path) dict
+        -_whisperx_transcribe()
+        -_assemblyai_transcribe()
+        -_groq_transcribe()
+    }
+
+    class SpeakerTranscriptBuilder {
+        +build(segments) dict
+    }
+
+    class MeetingSummaryService {
+        -client: Groq
+        +summarize(meeting_id, force, extra_prompt) dict
+        -_load_speaker_map(meeting_id) dict
+        -_build_conversation_text(segments) str
+        -_call_llm(system, user) str
+        -_generate_speaker_summaries() dict
+        -_generate_overall_summary_en() str
+        -_generate_overall_summary_hi() str
+    }
+
+    class MeetingInsightsService {
+        -client: Groq
+        +extract_action_items(meeting_id, force) dict
+        +generate_title(meeting_id, force) dict
+        +generate_followup_email(meeting_id, force) dict
+        +extract_requirements(meeting_id, force) dict
+        +generate_documentation(meeting_id, force) dict
+        +analyze_sentiment(meeting_id, force) dict
+        +extract_topics(meeting_id, force) dict
+        -_call_llm(system, user) str
+        -_load_transcript_text(meeting_id) tuple
+    }
+
+    class MeetingRAGService {
+        -_embeddings: HuggingFaceEmbeddings
+        -_vectorstore: Chroma
+        -_memories: dict
+        +ingest_meeting(meeting_id) int
+        +query(question, session_id, meeting_ids) dict
+        +query_stream(question, session_id) generator
+        +list_indexed_meetings() list
+        -_diverse_retrieve(question) list
+        -_rebuild_index()
+    }
+
+    class MeetingPublishService {
+        +generate_pdf(summary_data, output_path) str
+        +send_email(pdf_path, title, recipients) dict
+        +send_to_teams(summary_data, title, meeting_id) dict
+        +publish(meeting_id) dict
+        +generate_full_report(meeting_id) str
+    }
+
+    class JiraService {
+        +create_ticket(action_item, title) dict
+        +create_tickets_batch(items, title) dict
+        +update_ticket(ticket_key, item) dict
+        +fetch_ticket_status(ticket_key) dict
+        +sync_tickets(items) dict
+    }
+
+    AudioTranscriptionService --> VideoAudioConverter : uses
+    AudioTranscriptionService --> SpeakerTranscriptBuilder : uses
+    MeetingSummaryService --> MeetingInsightsService : same Groq client
+    MeetingPublishService --> MeetingSummaryService : reads summary
+    MeetingRAGService --> MeetingInsightsService : indexes insights
+```
+
+---
+
+## 14. Feature Mind Map
+
+```mermaid
+mindmap
+  root((ContextIQ))
+    🎙️ Ingestion
+      Video Upload
+      Audio Extraction FFmpeg
+      Multi-Engine STT
+        WhisperX Local
+        AssemblyAI Cloud
+        Groq Whisper
+      Speaker Diarization pyannote
+    🧠 AI Analytics
+      Bilingual Summary EN+HI
+      Action Items + Decisions
+      Requirements Extraction
+      Meeting Documentation
+      Sentiment Analysis
+      Topic Segmentation
+      Auto Title Generation
+      Follow-up Email Draft
+      Speaker Report Cards
+      Culture Score
+    👤 Human-in-the-Loop
+      Speaker Name Mapping
+      Summary Review + Approval
+      Auto Background Regeneration
+    📤 Publishing
+      PDF Report Generation
+      Email with Attachment
+      Teams Rich Adaptive Card
+      Follow-up Email SMTP
+    🎫 Integrations
+      Jira Bidirectional Sync
+        Push Action Items
+        Sync Status Back
+        Update Tickets
+    💬 AI Chat
+      RAG over Transcripts
+      SSE Streaming
+      Cross-Meeting Q and A
+      Citations with Timestamps
+      Conversation Memory
+    🔍 Search
+      Keyword Search
+      Full-Text Transcript Search
+```
+

@@ -83,6 +83,7 @@ class MeetingRAGService:
                 meeting_meta = json.load(f)
         meeting_date = meeting_meta.get("processed_date", "Unknown date")
         meeting_day = meeting_meta.get("processed_day", "Unknown day")
+        meeting_title = meeting_meta.get("auto_title", meeting_meta.get("title", f"Meeting {meeting_id[:8]}"))
 
         segments = transcript.get("segments", [])
         if not segments:
@@ -108,6 +109,7 @@ class MeetingRAGService:
                 page_content=f"[{meeting_date}, {meeting_day}] {speaker}: {text}",
                 metadata={
                     "meeting_id": meeting_id,
+                    "meeting_title": meeting_title,
                     "speaker": speaker,
                     "speaker_id": raw_speaker,
                     "start": start,
@@ -236,6 +238,7 @@ class MeetingRAGService:
 
         logger.info("Rebuild complete: %d total segments indexed", count)
 
+
     # ------------------------------------------------------------------
     # Query
     # ------------------------------------------------------------------
@@ -262,13 +265,15 @@ class MeetingRAGService:
         # This enables date-based queries like "what did we discuss on Monday"
         calendar_lines = []
         try:
-            for mid in self.list_indexed_meetings():
+            for m in self.list_indexed_meetings():
+                mid = m["id"]
+                title = m["title"]
                 meta_path = STORAGE_DIR / mid / "metadata.json"
                 if meta_path.exists():
                     with open(meta_path, "r", encoding="utf-8") as f:
                         mm = json.load(f)
                     calendar_lines.append(
-                        f"- Meeting {mid[:8]}: {mm.get('processed_date', 'Unknown')}, "
+                        f"- {title}: {mm.get('processed_date', 'Unknown')}, "
                         f"{mm.get('processed_day', 'Unknown')}, "
                         f"{mm.get('processed_time', '')}"
                     )
@@ -354,15 +359,17 @@ RULES:
     # Utilities
     # ------------------------------------------------------------------
     def list_indexed_meetings(self) -> list:
-        """Return list of meeting IDs that have been indexed."""
+        """Return list of {id, title} dicts for all indexed meetings."""
         try:
             collection = self._vectorstore._collection
             result = collection.get(include=["metadatas"])
-            meeting_ids = set()
+            seen = {}
             for meta in result.get("metadatas", []):
                 if meta and "meeting_id" in meta:
-                    meeting_ids.add(meta["meeting_id"])
-            return sorted(meeting_ids)
+                    mid = meta["meeting_id"]
+                    if mid not in seen:
+                        seen[mid] = meta.get("meeting_title", f"Meeting {mid[:8]}")
+            return [{ "id": mid, "title": title } for mid, title in sorted(seen.items())]
         except Exception as e:
             logger.warning("Failed to list indexed meetings: %s", e)
             return []
@@ -410,13 +417,15 @@ RULES:
         # Build meeting calendar
         calendar_lines = []
         try:
-            for mid in self.list_indexed_meetings():
+            for m in self.list_indexed_meetings():
+                mid = m["id"]
+                title = m["title"]
                 meta_path = STORAGE_DIR / mid / "metadata.json"
                 if meta_path.exists():
                     with open(meta_path, "r", encoding="utf-8") as f:
                         mm = json.load(f)
                     calendar_lines.append(
-                        f"- Meeting {mid[:8]}: {mm.get('processed_date', 'Unknown')}, "
+                        f"- {title}: {mm.get('processed_date', 'Unknown')}, "
                         f"{mm.get('processed_day', 'Unknown')}, "
                         f"{mm.get('processed_time', '')}"
                     )

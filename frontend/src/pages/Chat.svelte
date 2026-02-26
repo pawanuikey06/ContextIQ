@@ -38,7 +38,7 @@
         try {
             const res = await get(api.chat.meetings);
             indexedMeetings = res.indexed_meetings || [];
-            selectedMeetings = [...indexedMeetings];
+            selectedMeetings = indexedMeetings.map((m) => m.id);
         } catch {
             indexedMeetings = [];
         }
@@ -47,13 +47,12 @@
     async function indexAllMeetings() {
         indexingAll = true;
         try {
-            // Get all meetings
             const allRes = await get(api.meetings);
             const allMeetings = (allRes.meetings || []).map((m) => m.id);
-            // Get already indexed
             const idxRes = await get(api.chat.meetings);
-            const alreadyIndexed = new Set(idxRes.indexed_meetings || []);
-            // Index only un-indexed meetings
+            const alreadyIndexed = new Set(
+                (idxRes.indexed_meetings || []).map((m) => m.id),
+            );
             for (const mid of allMeetings) {
                 if (!alreadyIndexed.has(mid)) {
                     await post(api.chat.index(mid), null, 30000);
@@ -197,18 +196,19 @@
                     No meetings indexed yet.
                 </p>
             {:else}
-                {#each indexedMeetings as mid}
+                {#each indexedMeetings as m}
                     <label
                         class="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-surface-50 cursor-pointer transition-colors"
                     >
                         <input
                             type="checkbox"
-                            checked={selectedMeetings.includes(mid)}
-                            on:change={() => toggleMeeting(mid)}
+                            checked={selectedMeetings.includes(m.id)}
+                            on:change={() => toggleMeeting(m.id)}
                             class="rounded accent-brand-600"
                         />
-                        <span class="text-xs text-txt-muted truncate"
-                            >{shortId(mid)}</span
+                        <span
+                            class="text-xs text-txt-muted truncate"
+                            title={m.id}>{m.title}</span
                         >
                     </label>
                 {/each}

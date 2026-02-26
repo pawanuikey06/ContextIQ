@@ -274,19 +274,12 @@ class MeetingPublishService:
         meeting_title: str,
         date: str = None,
         webhook_url: str = None,
+        meeting_id: str = None,
     ) -> dict:
         """
-        Send a summary card to a Microsoft Teams channel
-        via Incoming Webhook.
-
-        Args:
-            summary_data: the meeting summary dict
-            meeting_title: display title
-            date: date string
-            webhook_url: Teams Incoming Webhook URL
-
-        Returns:
-            dict with success status and message
+        Send a rich Adaptive Card to a Microsoft Teams channel.
+        Includes: full summary, action items, decisions, speakers.
+        Zero extra AI tokens — reads from cached JSON only.
         """
         webhook_url = webhook_url or os.getenv("TEAMS_WEBHOOK_URL", "")
         if not webhook_url:
@@ -299,67 +292,124 @@ class MeetingPublishService:
         if date is None:
             date = datetime.now().strftime("%B %d, %Y")
 
-        # Build a clean overall summary snippet (first 300 chars)
-        overall = summary_data.get("overall_summary_en", "No summary available.")
-        snippet = overall[:300] + ("..." if len(overall) > 300 else "")
+        # Load action items, decisions, takeaways from disk (zero AI cost)
+        action_items, decisions, key_takeaways = [], [], []
+        if meeting_id:
+            action_path = STORAGE_DIR / meeting_id / "action_items.json"
+            if action_path.exists():
+                try:
+                    with open(action_path, "r", encoding="utf-8") as f:
+                        ai_data = json.load(f)
+                    action_items = ai_data.get("action_items", [])[:5]
+                    decisions = ai_data.get("decisions", [])[:4]
+                    key_takeaways = ai_data.get("key_takeaways", [])[:4]
+                except Exception:
+                    pass
 
-        # Teams Adaptive Card payload
+        speaker_summaries = summary_data.get("speaker_summaries_en", {})
+        overall = summary_data.get("overall_summary_en", "No summary available.")
+        snippet = overall[:600] + ("..." if len(overall) > 600 else "")
+
+        # Build card body dynamically
+        body = [
+            {
+                "type": "Container",
+                "style": "emphasis",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "text": f"📋 {meeting_title}",
+                        "weight": "Bolder",
+                        "size": "Large",
+                        "wrap": True,
+                        "color": "Accent",
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": f"🗓️ {date}  •  ContextIQ Meeting Intelligence",
+                        "isSubtle": True,
+                        "spacing": "None",
+                        "size": "Small",
+                    },
+                ],
+            },
+            {"type": "TextBlock", "text": "📝 Meeting Summary",
+             "weight": "Bolder", "size": "Medium", "spacing": "Medium", "color": "Accent"},
+            {"type": "TextBlock", "text": snippet, "wrap": True, "spacing": "Small", "size": "Small"},
+        ]
+
+        # Action Items
+        if action_items:
+            body.append({"type": "TextBlock", "text": "✅ Action Items",
+                         "weight": "Bolder", "size": "Medium", "spacing": "Medium", "color": "Good"})
+            for item in action_items:
+                task = item.get("task", "")
+                assignee = item.get("assigned_to", item.get("assignee", "TBD"))
+                deadline = item.get("deadline", "")
+                p = item.get("priority", "medium").upper()
+                icon = "🔴" if p == "HIGH" else "🟡" if p == "MEDIUM" else "🟢"
+                line = f"{icon} **{task}**"
+                if assignee: line += f"  •  👤 {assignee}"
+                if deadline: line += f"  •  📅 {deadline}"
+                body.append({"type": "TextBlock", "text": line, "wrap": True,
+                             "spacing": "Small", "size": "Small"})
+
+        # Decisions
+        if decisions:
+            body.append({"type": "TextBlock", "text": "🏛️ Key Decisions",
+                         "weight": "Bolder", "size": "Medium", "spacing": "Medium", "color": "Warning"})
+            lines = [f"• {d.get('decision', d.get('outcome', str(d))) if isinstance(d, dict) else d}"
+                     for d in decisions]
+            body.append({"type": "TextBlock", "text": "\n".join(lines),
+                         "wrap": True, "spacing": "Small", "size": "Small"})
+
+        # Key Takeaways
+        if key_takeaways:
+            body.append({"type": "TextBlock", "text": "💡 Key Takeaways",
+                         "weight": "Bolder", "size": "Medium", "spacing": "Medium", "color": "Accent"})
+            lines = [f"• {t.get('takeaway', t.get('point', str(t))) if isinstance(t, dict) else t}"
+                     for t in key_takeaways]
+            body.append({"type": "TextBlock", "text": "\n".join(lines),
+                         "wrap": True, "spacing": "Small", "size": "Small"})
+
+        # Speaker Highlights (max 3)
+        if speaker_summaries:
+            body.append({"type": "TextBlock", "text": "🎤 Speaker Highlights",
+                         "weight": "Bolder", "size": "Medium", "spacing": "Medium", "color": "Accent"})
+            for speaker, summary in list(speaker_summaries.items())[:3]:
+                s_snip = summary[:150] + ("..." if len(summary) > 150 else "")
+                body.append({"type": "TextBlock", "text": f"**{speaker}**: {s_snip}",
+                             "wrap": True, "spacing": "Small", "size": "Small", "isSubtle": True})
+
+        # Footer
+        body.append({"type": "TextBlock",
+                     "text": "📎 Full PDF report sent via Email — Generated by ContextIQ",
+                     "isSubtle": True, "size": "Small", "spacing": "Medium", "wrap": True})
+
         card_payload = {
             "type": "message",
-            "attachments": [
-                {
-                    "contentType": "application/vnd.microsoft.card.adaptive",
-                    "content": {
-                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                        "type": "AdaptiveCard",
-                        "version": "1.4",
-                        "body": [
-                            {
-                                "type": "TextBlock",
-                                "text": meeting_title,
-                                "weight": "Bolder",
-                                "size": "Large",
-                                "wrap": True,
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": f"Date: {date}",
-                                "isSubtle": True,
-                                "spacing": "None",
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": "Meeting Summary",
-                                "weight": "Bolder",
-                                "spacing": "Medium",
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": snippet,
-                                "wrap": True,
-                                "spacing": "Small",
-                            },
-                        ],
-                    },
-                }
-            ],
+            "attachments": [{
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.4",
+                    "body": body,
+                },
+            }],
         }
 
         try:
             resp = http_requests.post(
-                webhook_url,
-                json=card_payload,
-                headers={"Content-Type": "application/json"},
-                timeout=15,
+                webhook_url, json=card_payload,
+                headers={"Content-Type": "application/json"}, timeout=15,
             )
             if resp.status_code in (200, 202):
-                logger.info("Teams message sent successfully")
+                logger.info("Teams rich card sent successfully")
                 return {"success": True, "message": "Sent to Teams channel"}
             else:
-                return {
-                    "success": False,
-                    "message": f"Teams returned {resp.status_code}: {resp.text[:200]}",
-                }
+                return {"success": False,
+                        "message": f"Teams returned {resp.status_code}: {resp.text[:200]}"}
         except Exception as e:
             logger.error("Teams delivery failed: %s", e)
             return {"success": False, "message": f"Teams failed: {str(e)}"}
@@ -440,6 +490,7 @@ class MeetingPublishService:
             result["teams"] = self.send_to_teams(
                 summary_data, meeting_title, date,
                 webhook_url=teams_webhook_url,
+                meeting_id=meeting_id,
             )
         else:
             result["teams"] = {

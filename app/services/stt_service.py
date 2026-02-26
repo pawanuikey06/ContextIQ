@@ -37,10 +37,13 @@ class AudioTranscriptionService:
     """
 
     def __init__(self, device=None, compute_type=None):
-        import torch
-
         if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            try:
+                import torch
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            except Exception:
+                logger.warning("CUDA check failed — falling back to CPU")
+                self.device = "cpu"
         else:
             self.device = device
 
@@ -141,11 +144,19 @@ class AudioTranscriptionService:
 
         aai.settings.api_key = self.assemblyai_api_key
 
-        config = aai.TranscriptionConfig(
-            speech_models=["universal-2"],
-            language_detection=True,
-            speaker_labels=True,
-        )
+        config_kwargs = {
+            "speech_models": ["universal-2"],
+            "language_detection": True,
+            "speaker_labels": True,
+        }
+
+        # If SPEAKERS_EXPECTED is set in .env, tell AssemblyAI
+        speakers_expected = os.getenv("SPEAKERS_EXPECTED")
+        if speakers_expected:
+            config_kwargs["speakers_expected"] = int(speakers_expected)
+            logger.info("[AssemblyAI] speakers_expected=%s (from .env)", speakers_expected)
+
+        config = aai.TranscriptionConfig(**config_kwargs)
 
         logger.info("[AssemblyAI] Uploading and transcribing: %s", audio_path)
         transcriber = aai.Transcriber()

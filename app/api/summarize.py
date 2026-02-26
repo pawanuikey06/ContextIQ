@@ -12,6 +12,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Singleton — avoid re-creating the Groq client on every request
+_summary_service = None
+
+
+def _get_summary_service():
+    global _summary_service
+    if _summary_service is None:
+        _summary_service = MeetingSummaryService()
+    return _summary_service
+
 
 @router.post("/summarize/{meeting_id}", response_model=SummaryResponse)
 async def summarize_meeting(
@@ -30,7 +40,7 @@ async def summarize_meeting(
     )
 
     try:
-        service = MeetingSummaryService()
+        service = _get_summary_service()
         result = service.summarize(
             meeting_id, force=force, extra_prompt=extra_prompt
         )

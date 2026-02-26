@@ -15,19 +15,18 @@
     import { api, get, post } from "../lib/api.js";
     import { formatTime, shortId } from "../lib/utils.js";
     import { toasts } from "../lib/toast.js";
+    import { uploadState } from "../lib/stores.js";
     import Skeleton from "../components/Skeleton.svelte";
 
     let meetings = [];
     let loading = true;
-    let uploading = false;
-    let processing = false;
-    let uploadProgress = "";
     let totalMeetings = 0;
     let totalSpeakers = 0;
     let totalDuration = 0;
     let totalDurationFormatted = "0:00";
     let fileInput;
     let searchQuery = "";
+    let numSpeakers = "";
 
     $: filteredMeetings = searchQuery.trim()
         ? meetings.filter((m) =>
@@ -82,8 +81,12 @@
         const file = e.target.files[0];
         if (!file) return;
 
-        uploading = true;
-        uploadProgress = "Uploading video & extracting audio...";
+        uploadState.set({
+            uploading: true,
+            processing: false,
+            progress: "Uploading video & extracting audio...",
+            meetingId: null,
+        });
         toasts.info(`Uploading ${file.name}...`);
 
         try {
@@ -105,27 +108,45 @@
                 throw new Error("Server did not return a meeting ID");
             }
 
-            uploadProgress =
-                "Transcribing & diarizing (this may take a few minutes)...";
-            processing = true;
+            uploadState.set({
+                uploading: true,
+                processing: true,
+                progress:
+                    "Transcribing & diarizing (this may take a few minutes)...",
+                meetingId,
+            });
             toasts.info("Transcribing & diarizing...");
-            await post(api.transcribe(meetingId), null, 600000);
+            const transcribeUrl = numSpeakers
+                ? `${api.transcribe(meetingId)}?num_speakers=${numSpeakers}`
+                : api.transcribe(meetingId);
+            await post(transcribeUrl, null, 600000);
 
-            uploadProgress = "Indexing for AI search...";
+            uploadState.set({
+                uploading: true,
+                processing: true,
+                progress: "Indexing for AI search...",
+                meetingId,
+            });
             try {
                 await post(`${api.base}/chat/index/${meetingId}`);
             } catch {}
 
-            uploadProgress = "Complete!";
+            uploadState.set({
+                uploading: false,
+                processing: false,
+                progress: "Complete!",
+                meetingId: null,
+            });
             toasts.success("Meeting processed successfully! 🎉");
             await Promise.all([loadMeetings(), loadStats()]);
-            uploading = false;
-            processing = false;
         } catch (err) {
-            uploadProgress = `Error: ${err.message}`;
+            uploadState.set({
+                uploading: false,
+                processing: false,
+                progress: `Error: ${err.message}`,
+                meetingId: null,
+            });
             toasts.error(`Upload failed: ${err.message}`);
-            uploading = false;
-            processing = false;
         }
     }
 
@@ -174,11 +195,11 @@
         <button
             class="btn-primary"
             on:click={handleUpload}
-            disabled={uploading}
+            disabled={$uploadState.uploading}
         >
-            {#if uploading}
+            {#if $uploadState.uploading}
                 <Loader2 size={16} class="animate-spin" />
-                {#if processing}Processing…{:else}Uploading…{/if}
+                {#if $uploadState.processing}Processing…{:else}Uploading…{/if}
             {:else}
                 <Upload size={16} /> Upload Meeting
             {/if}
@@ -186,7 +207,7 @@
     </div>
 
     <!-- Progress Banner -->
-    {#if uploading}
+    {#if $uploadState.uploading}
         <div
             class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-8 flex items-center gap-3"
         >
@@ -195,9 +216,24 @@
             >
                 <Loader2 size={16} class="text-emerald-600 animate-spin" />
             </div>
-            <span class="text-sm text-emerald-800 font-medium"
-                >{uploadProgress}</span
-            >
+            <div class="flex-1">
+                <span class="text-sm text-emerald-800 font-medium"
+                    >{$uploadState.progress}</span
+                >
+                {#if $uploadState.meetingId}
+                    <span class="text-[10px] text-emerald-600/60 ml-2 font-mono"
+                        >ID: {shortId($uploadState.meetingId)}</span
+                    >
+                {/if}
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+                ></span>
+                <span
+                    class="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider"
+                    >Live</span
+                >
+            </div>
         </div>
     {/if}
 

@@ -365,27 +365,27 @@
                     </span>
                 </a>
 
-                <!-- New: Subtitle Export -->
+                <!-- Jira Integration -->
                 <a
-                    href="#/meetings"
+                    href="#/actions"
                     class="group rounded-2xl p-8 transition-all no-underline block bg-gradient-to-br from-amber-50/70 to-orange-50/50 border border-amber-100/60 hover:shadow-xl hover:shadow-amber-100/30 hover:-translate-y-1"
                 >
                     <div
                         class="w-12 h-12 rounded-xl bg-white flex items-center justify-center mb-6 shadow-sm border border-amber-100/50 group-hover:scale-110 transition-transform"
                     >
-                        <FileDown size={22} class="text-amber-600" />
+                        <Target size={22} class="text-amber-600" />
                     </div>
                     <h3 class="font-bold text-gray-900 text-lg mb-2">
-                        Subtitle Export
+                        Jira Integration
                     </h3>
                     <p class="text-sm text-gray-500 leading-relaxed mb-4">
-                        Download SRT and WebVTT subtitles with speaker labels —
-                        ready for video players and accessibility tools.
+                        Push action items to Jira as tickets with bi-directional
+                        sync for status, priority, and assignee updates.
                     </p>
                     <span
                         class="text-amber-600 text-sm font-semibold flex items-center gap-1 group-hover:gap-2 transition-all"
                     >
-                        Download <ArrowRight size={14} />
+                        Manage <ArrowRight size={14} />
                     </span>
                 </a>
             </div>

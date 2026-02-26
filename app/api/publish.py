@@ -13,6 +13,16 @@ from app.services.publish_service import MeetingPublishService
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Singleton — avoid re-creating the service on every request
+_publish_service = None
+
+
+def _get_publish_service():
+    global _publish_service
+    if _publish_service is None:
+        _publish_service = MeetingPublishService()
+    return _publish_service
+
 
 class PublishRequest(BaseModel):
     """Optional config for the publish endpoint."""
@@ -37,7 +47,7 @@ async def publish_meeting(meeting_id: str, body: PublishRequest = None):
     logger.info("[%s] Publish requested", meeting_id)
 
     try:
-        service = MeetingPublishService()
+        service = _get_publish_service()
         result = service.publish(
             meeting_id=meeting_id,
             meeting_title=body.meeting_title,
@@ -78,7 +88,7 @@ async def download_full_report(meeting_id: str):
     """Generate and download a comprehensive full meeting report PDF."""
     from pathlib import Path
     try:
-        service = MeetingPublishService()
+        service = _get_publish_service()
         pdf_path = service.generate_full_report(meeting_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

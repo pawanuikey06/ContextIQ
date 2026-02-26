@@ -20,7 +20,7 @@ STORAGE_DIR = Path("storage")
 async def get_dashboard_stats():
     """Return aggregate stats across all meetings."""
     total_meetings = 0
-    total_speakers = set()
+    total_speakers = 0
     total_duration = 0.0
     meetings_per_day = defaultdict(int)
 
@@ -50,11 +50,13 @@ async def get_dashboard_stats():
 
             segments = transcript.get("segments", [])
 
-            # Speakers
+            # Speakers — count unique per meeting, then sum
+            meeting_speakers = set()
             for seg in segments:
                 spk = seg.get("speaker", "UNKNOWN")
                 if spk != "UNKNOWN":
-                    total_speakers.add(spk)
+                    meeting_speakers.add(spk)
+            total_speakers += len(meeting_speakers)
 
             # Duration
             if segments:
@@ -91,7 +93,7 @@ async def get_dashboard_stats():
 
     return {
         "total_meetings": total_meetings,
-        "total_speakers": len(total_speakers),
+        "total_speakers": total_speakers,
         "total_duration_seconds": round(total_duration, 1),
         "total_duration_formatted": formatted,
         "meetings_per_day": per_day_list,

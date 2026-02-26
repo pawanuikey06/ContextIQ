@@ -776,3 +776,86 @@ RULES:
         neg = sum(1 for s in enriched_segments if s["sentiment"] == "negative")
         logger.info("[%s] Sentiment analyzed: %d segments (%d pos, %d neg)", meeting_id, len(enriched_segments), pos, neg)
         return result
+
+    # ──────────────────────────────────────────────────────────────
+    #  Topic Segmentation — what was discussed when
+    # ──────────────────────────────────────────────────────────────
+    def extract_topics(self, meeting_id: str, force: bool = False) -> dict:
+        """
+        Identify distinct topic segments in the meeting.
+        Returns a list of topics with time ranges, titles, summaries, and speakers.
+        Cached in storage/{meeting_id}/topics.json.
+        """
+        cache_path = STORAGE_DIR / meeting_id / "topics.json"
+        if not force and cache_path.exists():
+            with open(cache_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        full_text, segments = self._load_transcript_text(meeting_id)
+
+        # Build timestamped transcript for the LLM
+        timestamped_lines = []
+        for seg in segments:
+            start = seg.get("start", 0)
+            end = seg.get("end", 0)
+            speaker = seg.get("speaker", "UNKNOWN")
+            text = seg.get("text", "")
+            timestamped_lines.append(
+                f"[{round(start,1)}s-{round(end,1)}s] {speaker}: {text}"
+            )
+        timestamped_text = "\n".join(timestamped_lines)
+
+        system_prompt = """You are a meeting analyst. Given a timestamped meeting transcript, identify the distinct TOPICS discussed during the meeting.
+
+For each topic, provide:
+1. "title" — A short, descriptive title (3-8 words)
+2. "summary" — A 1-2 sentence summary of what was discussed
+3. "start_time" — Start time as a NUMBER IN SECONDS (e.g. 0, 19.5, 61, 180)
+4. "end_time" — End time as a NUMBER IN SECONDS (e.g. 19.5, 61, 180, 343)
+5. "speakers" — List of speaker IDs who participated in this topic
+
+IMPORTANT: start_time and end_time MUST be numbers in SECONDS, NOT minutes. The transcript timestamps are in seconds (e.g. [19.5s-61.2s]).
+
+Rules:
+- Identify 3-8 distinct topics based on the conversation flow
+- Topics should cover the FULL meeting duration without gaps
+- Each topic should represent a meaningful shift in discussion
+- Order topics chronologically
+- Return ONLY a valid JSON array, no markdown fences"""
+
+        user_prompt = f"Identify the distinct topics discussed in this meeting:\n\n{timestamped_text}"
+
+        logger.info("[%s] Extracting topics via LLM...", meeting_id)
+        raw = self._call_llm(system_prompt, user_prompt)
+
+        # Parse JSON response
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            raw = raw.rsplit("```", 1)[0]
+
+        try:
+            topics = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("[%s] Failed to parse topics JSON, using fallback", meeting_id)
+            total_dur = max((s.get("end", 0) for s in segments), default=0)
+            topics = [{
+                "title": "Full Meeting Discussion",
+                "summary": "Complete meeting transcript.",
+                "start_time": 0,
+                "end_time": total_dur,
+                "speakers": list(set(s.get("speaker", "UNKNOWN") for s in segments)),
+            }]
+
+        result = {
+            "meeting_id": meeting_id,
+            "topic_count": len(topics),
+            "topics": topics,
+        }
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+        logger.info("[%s] Topics extracted: %d topics", meeting_id, len(topics))
+        return result

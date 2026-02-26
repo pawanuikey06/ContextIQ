@@ -17,6 +17,9 @@
         ClipboardList,
         FileText,
         BarChart3,
+        Activity,
+        Tag,
+        Layers,
     } from "lucide-svelte";
     import { toasts } from "../lib/toast.js";
     import { api, get, post } from "../lib/api.js";
@@ -78,6 +81,18 @@
     // Sentiment (optional)
     let sentimentData = null;
     let analyzingSentiment = false;
+
+    // Speaker Analytics
+    let speakerAnalyticsData = null;
+    let loadingSpeakerAnalytics = false;
+
+    // Keyword Cloud
+    let keywordsData = null;
+    let loadingKeywords = false;
+
+    // Topic Segmentation
+    let topicsData = null;
+    let loadingTopics = false;
 
     const tabs = [
         {
@@ -142,6 +157,33 @@
             bg: "bg-pink-50",
             border: "border-pink-100",
             desc: "Analyze emotional tone and mood shifts throughout the meeting.",
+        },
+        {
+            id: "speakerStats",
+            label: "Speaker Stats",
+            icon: Activity,
+            color: "text-cyan-600",
+            bg: "bg-cyan-50",
+            border: "border-cyan-100",
+            desc: "Detailed per-speaker metrics: talk-time, words/min, interruptions.",
+        },
+        {
+            id: "keywords",
+            label: "Keyword Cloud",
+            icon: Tag,
+            color: "text-orange-600",
+            bg: "bg-orange-50",
+            border: "border-orange-100",
+            desc: "Top keywords and terms discussed most frequently in the meeting.",
+        },
+        {
+            id: "topics",
+            label: "Topics",
+            icon: Layers,
+            color: "text-indigo-600",
+            bg: "bg-indigo-50",
+            border: "border-indigo-100",
+            desc: "Topic segmentation — what was discussed when during the meeting.",
         },
     ];
 
@@ -395,6 +437,8 @@
             times[spk] += seg.end - seg.start;
         });
         const total = Object.values(times).reduce((a, b) => a + b, 0) || 1;
+        // Reference smap to re-trigger when speaker names change
+        const _smap = smap;
         return Object.entries(times)
             .sort((a, b) => b[1] - a[1])
             .map(([speaker, duration]) => ({
@@ -451,15 +495,10 @@
         });
     }
 
-    // Render chart when Speaker tab becomes active
-    let chartRendered = false;
+    // Re-render chart when Speaker tab is active (re-renders on smap changes too)
     afterUpdate(() => {
-        if (activeTab === "speaker" && talkTimeCanvas && !chartRendered) {
-            chartRendered = true;
+        if (activeTab === "speaker" && talkTimeCanvas) {
             renderTalkTimeChart();
-        }
-        if (activeTab !== "speaker") {
-            chartRendered = false;
         }
     });
 </script>
@@ -757,30 +796,13 @@
     <div class="max-w-6xl mx-auto px-6 py-6">
         <!-- ═══════════════════ CHAT VIEW ═══════════════════ -->
         {#if activeTab === "chat"}
-            <!-- Subtitle Export Bar -->
+            <!-- Segment count -->
             <div class="flex items-center justify-between mb-4">
                 <p
                     class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]"
                 >
                     {segments.length} segments
                 </p>
-                <div class="flex items-center gap-2">
-                    <span class="text-[11px] text-txt-faint">Download:</span>
-                    <a
-                        href={api.subtitleSrt(meetingId)}
-                        download
-                        class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
-                    >
-                        <Download size={11} /> SRT
-                    </a>
-                    <a
-                        href={api.subtitleVtt(meetingId)}
-                        download
-                        class="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg transition-colors"
-                    >
-                        <Download size={11} /> VTT
-                    </a>
-                </div>
             </div>
             <div class="max-w-3xl space-y-3">
                 {#each segments as seg, i}
@@ -2510,6 +2532,535 @@
                                 </div>
                             {/each}
                         </div>
+                    </div>
+                {/if}
+            </div>
+        {/if}
+
+        <!-- ═══════════════════ SPEAKER STATS VIEW ═══════════════════ -->
+        {#if activeTab === "speakerStats"}
+            <div class="max-w-4xl space-y-6">
+                <!-- Load Button -->
+                <div class="flex items-center justify-between">
+                    <p
+                        class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]"
+                    >
+                        Speaker Analytics
+                    </p>
+                    <button
+                        class="btn-secondary text-sm"
+                        on:click={async () => {
+                            loadingSpeakerAnalytics = true;
+                            try {
+                                speakerAnalyticsData = await get(
+                                    api.speakerAnalytics(meetingId),
+                                );
+                            } catch (e) {
+                                toasts.error(
+                                    "Failed to load speaker analytics",
+                                );
+                            } finally {
+                                loadingSpeakerAnalytics = false;
+                            }
+                        }}
+                        disabled={loadingSpeakerAnalytics}
+                    >
+                        {#if loadingSpeakerAnalytics}
+                            <Loader2 size={14} class="animate-spin" /> Loading…
+                        {:else}
+                            <Activity size={14} />
+                            {speakerAnalyticsData
+                                ? "Refresh"
+                                : "Load Analytics"}
+                        {/if}
+                    </button>
+                </div>
+
+                {#if !speakerAnalyticsData}
+                    <div
+                        class="bg-white border border-surface-200 rounded-2xl p-10 text-center"
+                    >
+                        <div
+                            class="w-12 h-12 mx-auto rounded-xl bg-cyan-100 flex items-center justify-center mb-4"
+                        >
+                            <Activity size={22} class="text-cyan-600" />
+                        </div>
+                        <h3
+                            class="text-base font-semibold text-txt-primary mb-1"
+                        >
+                            Speaker Analytics
+                        </h3>
+                        <p class="text-sm text-txt-muted max-w-sm mx-auto">
+                            Click "Load Analytics" to see detailed per-speaker
+                            metrics computed from the transcript.
+                        </p>
+                    </div>
+                {:else}
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-3 gap-3">
+                        <div
+                            class="bg-white border border-surface-200 rounded-xl p-4 text-center"
+                        >
+                            <span class="text-2xl font-extrabold text-cyan-600"
+                                >{speakerAnalyticsData.total_speakers}</span
+                            >
+                            <p
+                                class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
+                            >
+                                Speakers
+                            </p>
+                        </div>
+                        <div
+                            class="bg-white border border-surface-200 rounded-xl p-4 text-center"
+                        >
+                            <span class="text-2xl font-extrabold text-blue-600"
+                                >{Math.floor(
+                                    speakerAnalyticsData.total_duration / 60,
+                                )}m {Math.round(
+                                    speakerAnalyticsData.total_duration % 60,
+                                )}s</span
+                            >
+                            <p
+                                class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
+                            >
+                                Total Duration
+                            </p>
+                        </div>
+                        <div
+                            class="bg-white border border-surface-200 rounded-xl p-4 text-center"
+                        >
+                            <span
+                                class="text-2xl font-extrabold text-purple-600"
+                                >{speakerAnalyticsData.speakers
+                                    .reduce((a, s) => a + s.word_count, 0)
+                                    .toLocaleString()}</span
+                            >
+                            <p
+                                class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
+                            >
+                                Total Words
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Per-Speaker Table -->
+                    <div
+                        class="bg-white border border-surface-200 rounded-2xl overflow-hidden"
+                    >
+                        <table class="w-full">
+                            <thead>
+                                <tr
+                                    class="border-b border-surface-200 bg-surface-50/60"
+                                >
+                                    <th
+                                        class="text-left px-4 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
+                                        >Speaker</th
+                                    >
+                                    <th
+                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
+                                        >Talk Time</th
+                                    >
+                                    <th
+                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
+                                        >Words</th
+                                    >
+                                    <th
+                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
+                                        >WPM</th
+                                    >
+                                    <th
+                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
+                                        >Interruptions</th
+                                    >
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {#each speakerAnalyticsData.speakers as s}
+                                    <tr
+                                        class="border-b border-surface-100 last:border-0 hover:bg-surface-50/40 transition-colors"
+                                    >
+                                        <td class="px-4 py-3">
+                                            <div
+                                                class="flex items-center gap-2.5"
+                                            >
+                                                <div
+                                                    class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                                                    style="background-color: {getColor(
+                                                        s.speaker_id,
+                                                    )}"
+                                                >
+                                                    {s.display_name
+                                                        .charAt(0)
+                                                        .toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <span
+                                                        class="text-[13px] font-semibold text-txt-primary"
+                                                        >{s.display_name}</span
+                                                    >
+                                                    <span
+                                                        class="text-[10px] text-txt-faint ml-2"
+                                                        >{s.segment_count} segs</span
+                                                    >
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-3 text-center">
+                                            <div
+                                                class="flex flex-col items-center gap-1"
+                                            >
+                                                <span
+                                                    class="text-[13px] font-semibold text-txt-primary"
+                                                    >{s.talk_time_percent}%</span
+                                                >
+                                                <div
+                                                    class="w-full bg-surface-100 rounded-full h-1.5"
+                                                >
+                                                    <div
+                                                        class="h-full rounded-full transition-all"
+                                                        style="width: {s.talk_time_percent}%; background-color: {getColor(
+                                                            s.speaker_id,
+                                                        )}"
+                                                    ></div>
+                                                </div>
+                                                <span
+                                                    class="text-[10px] text-txt-faint"
+                                                    >{Math.floor(
+                                                        s.talk_time_seconds /
+                                                            60,
+                                                    )}m {Math.round(
+                                                        s.talk_time_seconds %
+                                                            60,
+                                                    )}s</span
+                                                >
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-3 text-center">
+                                            <span
+                                                class="text-[13px] font-semibold text-txt-primary"
+                                                >{s.word_count.toLocaleString()}</span
+                                            >
+                                        </td>
+                                        <td class="px-3 py-3 text-center">
+                                            <span
+                                                class="text-[13px] font-bold"
+                                                style="color: {s.words_per_minute >
+                                                160
+                                                    ? '#ef4444'
+                                                    : s.words_per_minute > 130
+                                                      ? '#f59e0b'
+                                                      : '#10b981'}"
+                                            >
+                                                {s.words_per_minute}
+                                            </span>
+                                            <span
+                                                class="text-[9px] text-txt-faint block"
+                                                >{s.words_per_minute > 160
+                                                    ? "Fast"
+                                                    : s.words_per_minute > 130
+                                                      ? "Normal"
+                                                      : "Slow"}</span
+                                            >
+                                        </td>
+                                        <td class="px-3 py-3 text-center">
+                                            {#if s.interruptions > 0}
+                                                <span
+                                                    class="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full"
+                                                >
+                                                    {s.interruptions}
+                                                </span>
+                                            {:else}
+                                                <span
+                                                    class="text-[12px] text-txt-faint"
+                                                    >—</span
+                                                >
+                                            {/if}
+                                        </td>
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                    </div>
+                {/if}
+            </div>
+        {/if}
+
+        <!-- ═══════════════════ KEYWORD CLOUD VIEW ═══════════════════ -->
+        {#if activeTab === "keywords"}
+            <div class="max-w-4xl space-y-6">
+                <!-- Load Button -->
+                <div class="flex items-center justify-between">
+                    <p
+                        class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]"
+                    >
+                        Keyword Cloud
+                    </p>
+                    <button
+                        class="btn-secondary text-sm"
+                        on:click={async () => {
+                            loadingKeywords = true;
+                            try {
+                                keywordsData = await get(
+                                    api.keywords(meetingId),
+                                );
+                            } catch (e) {
+                                toasts.error("Failed to load keywords");
+                            } finally {
+                                loadingKeywords = false;
+                            }
+                        }}
+                        disabled={loadingKeywords}
+                    >
+                        {#if loadingKeywords}
+                            <Loader2 size={14} class="animate-spin" /> Loading…
+                        {:else}
+                            <Tag size={14} />
+                            {keywordsData ? "Refresh" : "Extract Keywords"}
+                        {/if}
+                    </button>
+                </div>
+
+                {#if !keywordsData}
+                    <div
+                        class="bg-white border border-surface-200 rounded-2xl p-10 text-center"
+                    >
+                        <div
+                            class="w-12 h-12 mx-auto rounded-xl bg-orange-100 flex items-center justify-center mb-4"
+                        >
+                            <Tag size={22} class="text-orange-600" />
+                        </div>
+                        <h3
+                            class="text-base font-semibold text-txt-primary mb-1"
+                        >
+                            Keyword Cloud
+                        </h3>
+                        <p class="text-sm text-txt-muted max-w-sm mx-auto">
+                            Click "Extract Keywords" to see the most frequently
+                            discussed terms in this meeting.
+                        </p>
+                    </div>
+                {:else}
+                    <!-- Stats Row -->
+                    <div class="flex items-center gap-4">
+                        <div
+                            class="bg-white border border-surface-200 rounded-xl px-4 py-3 flex items-center gap-2"
+                        >
+                            <span class="text-lg font-extrabold text-orange-600"
+                                >{keywordsData.total_unique_words}</span
+                            >
+                            <span
+                                class="text-[11px] text-txt-faint uppercase tracking-wider"
+                                >Unique Words</span
+                            >
+                        </div>
+                        <div
+                            class="bg-white border border-surface-200 rounded-xl px-4 py-3 flex items-center gap-2"
+                        >
+                            <span class="text-lg font-extrabold text-blue-600"
+                                >{keywordsData.keywords.length}</span
+                            >
+                            <span
+                                class="text-[11px] text-txt-faint uppercase tracking-wider"
+                                >Top Keywords</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Word Cloud -->
+                    <div
+                        class="bg-white border border-surface-200 rounded-2xl p-8"
+                    >
+                        <div
+                            class="flex flex-wrap items-center justify-center gap-3"
+                        >
+                            {#each keywordsData.keywords as kw, i}
+                                {@const hue = (i * 37) % 360}
+                                {@const size = 12 + Math.round(kw.weight * 24)}
+                                <span
+                                    class="inline-block font-bold cursor-default transition-transform hover:scale-125 hover:-translate-y-1"
+                                    style="font-size: {size}px; color: hsl({hue}, 70%, 45%); opacity: {0.5 +
+                                        kw.weight * 0.5};"
+                                    title="{kw.word}: {kw.count} occurrences"
+                                >
+                                    {kw.word}
+                                </span>
+                            {/each}
+                        </div>
+                    </div>
+
+                    <!-- Top Keywords Bar Chart -->
+                    <div
+                        class="bg-white border border-surface-200 rounded-2xl p-6"
+                    >
+                        <span
+                            class="text-[10px] font-bold text-orange-600 uppercase tracking-[0.15em] block mb-4"
+                            >Top 15 Keywords by Frequency</span
+                        >
+                        <div class="space-y-2">
+                            {#each keywordsData.keywords.slice(0, 15) as kw, i}
+                                {@const hue = (i * 37) % 360}
+                                <div class="flex items-center gap-3">
+                                    <span
+                                        class="w-24 text-[12px] font-semibold text-txt-primary text-right truncate"
+                                        >{kw.word}</span
+                                    >
+                                    <div
+                                        class="flex-1 bg-surface-100 rounded-full h-5 overflow-hidden"
+                                    >
+                                        <div
+                                            class="h-full rounded-full flex items-center px-2 transition-all duration-500"
+                                            style="width: {Math.max(
+                                                kw.weight * 100,
+                                                8,
+                                            )}%; background-color: hsl({hue}, 70%, 50%);"
+                                        >
+                                            <span
+                                                class="text-[10px] font-bold text-white"
+                                                >{kw.count}</span
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
+            </div>
+        {/if}
+
+        <!-- ══════════════ TOPICS TAB ══════════════ -->
+        {#if activeTab === "topics"}
+            <div class="max-w-4xl space-y-6">
+                <!-- Load Button -->
+                <div class="flex items-center justify-between">
+                    <p
+                        class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]"
+                    >
+                        Topic Segmentation
+                    </p>
+                    <button
+                        class="btn-secondary text-sm"
+                        on:click={async () => {
+                            loadingTopics = true;
+                            try {
+                                topicsData = await post(
+                                    api.topics(meetingId),
+                                    null,
+                                    120000,
+                                );
+                            } catch (e) {
+                                toasts.error("Failed to extract topics");
+                            } finally {
+                                loadingTopics = false;
+                            }
+                        }}
+                        disabled={loadingTopics}
+                    >
+                        {#if loadingTopics}
+                            <Loader2 size={14} class="animate-spin" /> Analyzing…
+                        {:else}
+                            <Layers size={14} />
+                            {topicsData ? "Refresh" : "Extract Topics"}
+                        {/if}
+                    </button>
+                </div>
+
+                {#if !topicsData}
+                    <div
+                        class="bg-surface-50 border border-surface-200/60 rounded-2xl p-10 text-center"
+                    >
+                        <Layers
+                            size={40}
+                            class="mx-auto text-indigo-300 mb-3"
+                        />
+                        <p class="text-txt-secondary">
+                            Click <strong>Extract Topics</strong> to identify what
+                            was discussed when.
+                        </p>
+                    </div>
+                {:else}
+                    <!-- Stats Bar -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-indigo-50 rounded-xl p-4 text-center">
+                            <span class="text-2xl font-bold text-indigo-600"
+                                >{topicsData.topic_count}</span
+                            >
+                            <p class="text-xs text-indigo-500 mt-1">
+                                Topics Identified
+                            </p>
+                        </div>
+                        <div class="bg-purple-50 rounded-xl p-4 text-center">
+                            <span class="text-2xl font-bold text-purple-600"
+                                >{formatDuration(
+                                    segments.length > 0
+                                        ? segments[segments.length - 1].end
+                                        : 0,
+                                )}</span
+                            >
+                            <p class="text-xs text-purple-500 mt-1">
+                                Total Duration
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Topic Timeline -->
+                    <div class="relative">
+                        <!-- Vertical line -->
+                        <div
+                            class="absolute left-6 top-0 bottom-0 w-0.5 bg-indigo-200"
+                        ></div>
+
+                        {#each topicsData.topics as topic, i}
+                            {@const colors = [
+                                "bg-indigo-500",
+                                "bg-purple-500",
+                                "bg-blue-500",
+                                "bg-emerald-500",
+                                "bg-amber-500",
+                                "bg-rose-500",
+                                "bg-cyan-500",
+                                "bg-teal-500",
+                            ]}
+                            <div class="relative flex gap-4 pb-6">
+                                <!-- Circle marker -->
+                                <div
+                                    class="relative z-10 flex-shrink-0 w-12 h-12 rounded-full {colors[
+                                        i % colors.length
+                                    ]} flex items-center justify-center text-white font-bold text-lg shadow-lg"
+                                >
+                                    {i + 1}
+                                </div>
+
+                                <!-- Topic Card -->
+                                <div
+                                    class="flex-1 bg-white border border-surface-200/60 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow"
+                                >
+                                    <div class="mb-2">
+                                        <h3
+                                            class="font-semibold text-txt-primary text-base"
+                                        >
+                                            {topic.title}
+                                        </h3>
+                                    </div>
+                                    <p
+                                        class="text-sm text-txt-secondary leading-relaxed mb-3"
+                                    >
+                                        {topic.summary}
+                                    </p>
+                                    {#if topic.speakers && topic.speakers.length > 0}
+                                        <div class="flex flex-wrap gap-1.5">
+                                            {#each topic.speakers as spk}
+                                                <span
+                                                    class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600"
+                                                >
+                                                    {displayName(spk)}
+                                                </span>
+                                            {/each}
+                                        </div>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 {/if}
             </div>

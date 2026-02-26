@@ -1,0 +1,48 @@
+=== PARAGRAPHS ===
+[1] Style=normal: VRIZE Video Analytics Hackathon: Team Submission Template
+[2] Style=normal: Instructions for Teams: Please complete this template and upload it to your designated OneDrive folder along with all referenced output files. Ensure every stage of your pipeline is documented clearly so the evaluation committee can  assess your work easily.
+[3] Style=normal: Team Information
+[4] Style=normal: Team Name: [Insert Team Name]
+[5] Style=normal: Team Members: [List Member Names]
+[6] Style=normal: Project Name/Brief Description: [1-2 sentences summarizing your core approach and the most innovative feature you built]
+[8] Style=normal: Part 1: Open-Source Tool Registry
+[9] Style=normal: List all the open-source tools, libraries, and models your team used during the hackathon.
+[11] Style=normal: Part 2: Standard Operating Procedure (SOP) & Pipeline Stages
+[12] Style=normal: Break down your video analytics pipeline into sequential stages. For each stage, clearly define the inputs, the tools used, and the link to the exact output file saved in your OneDrive folder.
+[13] Style=normal: Stage 1: [e.g., Data Pre-Processing & Audio Extraction]
+[14] Style=normal: Objective: [What were you trying to achieve?]
+[15] Style=normal: Tool(s) Used: [Tool name]
+[16] Style=normal: Input Data: [e.g., Original MS Teams .mp4 video]
+[17] Style=normal: Output File Link: [Insert OneDrive link to the exact output file for this stage, e.g., extracted_audio.wav]
+[18] Style=normal: Execution Details/Commands: [Provide the script, command line code, or a brief explanation of how the tool was run]
+[19] Style=normal: Stage 2: [e.g., Transcription & Diarization]
+[20] Style=normal: Objective: [e.g., Convert audio to text and assign speakers]
+[21] Style=normal: Tool(s) Used: [Tool name]
+[22] Style=normal: Input Data: [e.g., extracted_audio.wav]
+[23] Style=normal: Output File Link: [Insert OneDrive link to the exact output file, e.g., raw_transcript.json]
+[24] Style=normal: Execution Details/Commands: [How was this generated?]
+[25] Style=normal: Stage 3: [e.g., Analytics & Feature Generation]
+[26] Style=normal: Objective: [e.g., Sentiment analysis, extracting action items]
+[27] Style=normal: Tool(s) Used: [Tool name]
+[28] Style=normal: Input Data: [e.g., raw_transcript.json]
+[29] Style=normal: Output File Link: [Insert OneDrive link to the analytics outputs]
+[30] Style=normal: Execution Details/Commands: [How was this generated?]
+[31] Style=normal: (Add more stages as necessary to cover your entire pipeline)
+[33] Style=normal: Part 3: Features & Innovation Summary
+[34] Style=normal: Highlight the capabilities of your final analytics report.
+[35] Style=normal: List of Features Built: * [e.g., Automated Meeting Summary]
+[36] Style=normal: [e.g., Speaker Talk-Time Percentages]
+[37] Style=normal: [Feature 3]
+[38] Style=normal: Innovation Highlight: [Explain in 1 paragraph what makes your approach unique. Did you chain tools together in a novel way? Did you extract a metric that wasn't obvious?]
+[39] Style=normal: Part 4: Final Deliverables
+[40] Style=normal: Link to Final Analytics Report: [Insert OneDrive link to the final PDF/Dashboard/Report]
+[41] Style=normal: Self-Reported Transcript Accuracy (Optional): [If your team ran an automated comparison against the provided PDF ground truth, state your percentage match here and the metric used, e.g., Word Error Rate]
+
+=== TABLES ===
+
+Table 0: 5 rows x 4 cols
+  Row 0: ['Tool / Library Name', 'Version', 'Primary Purpose', 'Stage Used']
+  Row 1: ['e.g., FFmpeg', 'v6.0', 'Audio extraction from MS Teams video', 'Stage 1']
+  Row 2: ['e.g., WhisperX', 'v3.1', 'Speech-to-Text and Speaker Diarization', 'Stage 2']
+  Row 3: ['', '', '', '']
+  Row 4: ['', '', '', '']

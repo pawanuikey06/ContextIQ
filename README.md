@@ -1,10 +1,10 @@
 # ContextIQ — Meeting Intelligence Platform
 
-> Upload a meeting video → get **speaker-diarized transcription**, **bilingual AI summaries**, **sentiment analysis**, **action items**, **RAG chatbot**, **subtitle export**, **full PDF reports**, and **one-click publishing** — all privacy-first, running locally on your GPU.
+> Upload a meeting video → get **speaker-diarized transcription**, **bilingual AI summaries**, **sentiment analysis**, **action items**, **Jira integration**, **RAG chatbot**, **full PDF reports**, and **one-click publishing** — all privacy-first, running locally on your GPU.
 
 ---
 
-## ✨ Features (30+ Capabilities)
+## ✨ Features (36+ Capabilities)
 
 ### 🎬 Ingestion & Processing
 | # | Feature | Details |
@@ -16,7 +16,7 @@
 ### 🗣️ Transcription & Diarization
 | # | Feature | Details |
 |---|---------|---------|
-| 4 | **WhisperX STT** | CTranslate2 engine with word-level timestamps |
+| 4 | **Multi-Engine STT** | AssemblyAI (primary), Groq Whisper, local WhisperX — configurable via `STT_MODE` |
 | 5 | **Speaker Diarization** | pyannote.audio 3.1 identifies individual speakers |
 | 6 | **GPU Acceleration** | Auto-detects NVIDIA CUDA GPUs (3–5× faster) |
 | 7 | **Auto Metadata** | Processing timestamps, segment/speaker counts auto-saved |
@@ -54,10 +54,8 @@
 |---|---------|---------|
 | 24 | **PDF Summary** | Professional layout with Unicode Hindi (NotoSansDevanagari) |
 | 25 | **Full Report PDF** | Combines summary + action items + requirements + docs |
-| 26 | **SRT Subtitle Export** | Standard `.srt` with speaker labels |
-| 27 | **VTT Subtitle Export** | WebVTT format with `<v Speaker>` cues |
-| 28 | **Email Publishing** | SMTP delivery with PDF attachment |
-| 29 | **Teams Webhook** | Microsoft Teams Adaptive Card delivery |
+| 26 | **Email Publishing** | SMTP delivery with PDF attachment |
+| 27 | **Teams Webhook** | Microsoft Teams Adaptive Card delivery |
 
 ### 🖥️ Modern Svelte Frontend
 | # | Feature | Details |
@@ -66,9 +64,16 @@
 | 31 | **Meeting Detail** | 7-card feature grid (Chat, Speakers, Timeline, Summary, Action Items, Docs, Requirements, Sentiment) |
 | 32 | **Meeting Search** | Live keyword search across transcripts, titles, speakers |
 | 33 | **AI Chat Page** | Streaming chatbot with session management |
-| 34 | **Action Items Tracker** | Jira-style task board with inline editing |
+| 34 | **Action Items Tracker** | Jira-style task board with inline editing + one-click Jira push |
 | 35 | **Toast Notifications** | System-wide feedback (success/error/info) |
 | 36 | **Skeleton Loading** | Shimmer loading states for polished UX |
+
+### 🔗 Jira Integration
+| # | Feature | Details |
+|---|---------|---------|
+| 37 | **Push to Jira** | One-click push of individual or all action items to Jira as tickets |
+| 38 | **Sync from Jira** | Bi-directional sync — fetch status/priority/assignee updates back from Jira |
+| 39 | **Update to Jira** | Edit action items in ContextIQ and push changes back to linked Jira tickets |
 
 ---
 
@@ -85,14 +90,14 @@
 ┌────────────────────────────▼─────────────────────────────────┐
 │                    API LAYER (FastAPI)                         │
 │  upload │ transcribe │ diarization │ summarize │ publish      │
-│  speaker_map │ insights │ chat │ stats │ subtitles │ search  │
+│  speaker_map │ insights │ chat │ stats │ subtitles │ jira    │
 └────────────────────────────┬─────────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────────┐
 │                   SERVICES LAYER                              │
 │  stt_service │ rag_service │ summary_service │ publish_service│
-│  insights_service │ speaker_service │ storage_service         │
-│                      video_to_audio                           │
+│  insights_service │ speaker_service │ jira_service            │
+│         storage_service │ video_to_audio                      │
 └────────────────────────────┬─────────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────────┐
@@ -123,14 +128,15 @@ ContextIQ/
 │   │   ├── chat.py                  # POST /chat/ask/stream (SSE)
 │   │   ├── insights.py              # Action items, auto-title, email, requirements, docs, sentiment
 │   │   ├── stats.py                 # GET /stats (dashboard aggregates)
-│   │   ├── subtitles.py             # GET /subtitles/srt and /vtt
-│   │   └── search.py               # GET /search?q= (keyword search)
+│   │   ├── search.py                # GET /search?q= (keyword search)
+│   │   └── jira.py                  # Jira push, sync, update endpoints
 │   ├── services/
-│   │   ├── stt_service.py           # WhisperX + pyannote (GPU offloading)
+│   │   ├── stt_service.py           # Multi-engine STT (AssemblyAI, Groq, WhisperX)
 │   │   ├── rag_service.py           # LangChain + ChromaDB + Groq RAG
 │   │   ├── summary_service.py       # Groq Llama 3.3 70B summarization
 │   │   ├── insights_service.py      # Action items, sentiment, requirements, docs
 │   │   ├── publish_service.py       # PDF (fpdf2) + SMTP + Teams + Full Report
+│   │   ├── jira_service.py          # Jira REST API client (create, sync, update)
 │   │   ├── speaker_service.py       # Speaker segment grouping
 │   │   ├── storage_service.py       # JSON persistence
 │   │   └── video_to_audio.py        # FFmpeg extraction
@@ -166,7 +172,7 @@ ContextIQ/
 
 ---
 
-## 📡 API Reference (27 Endpoints)
+## 📡 API Reference (32 Endpoints)
 
 ### Upload & Transcription
 | Method | Endpoint | Description |
@@ -197,12 +203,7 @@ ContextIQ/
 | `GET` | `/chat/meetings` | List indexed meetings |
 | `POST` | `/chat/clear/{session_id}` | Clear chat session |
 
-### Search & Export
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/search?q=keyword` | Keyword search across all meetings |
-| `GET` | `/meeting/{id}/subtitles/srt` | Download SRT subtitle file |
-| `GET` | `/meeting/{id}/subtitles/vtt` | Download VTT subtitle file |
+
 
 ### Publishing
 | Method | Endpoint | Description |
@@ -212,6 +213,14 @@ ContextIQ/
 | `GET` | `/publish/{id}/full-report` | Download comprehensive report PDF |
 | `POST` | `/meeting/{id}/speaker-map` | Save speaker names |
 | `GET` | `/meeting/{id}/speaker-map` | Get speaker names |
+
+### Jira Integration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/jira/status` | Check if Jira is configured |
+| `POST` | `/meeting/{id}/jira/push` | Push action items to Jira |
+| `POST` | `/meeting/{id}/jira/sync` | Sync statuses back from Jira |
+| `PUT` | `/meeting/{id}/jira/update` | Update a linked Jira ticket |
 
 ### System
 | Method | Endpoint | Description |
@@ -231,7 +240,7 @@ ContextIQ/
 | **Styling** | TailwindCSS |
 | **Icons** | Lucide Svelte |
 | **Routing** | svelte-spa-router (hash-based) |
-| **Transcription** | WhisperX (CTranslate2) |
+| **Transcription** | AssemblyAI (primary) / Groq Whisper / WhisperX (local) |
 | **Diarization** | pyannote.audio 3.1 |
 | **LLM** | Llama 3.3 70B via Groq (~500 tok/sec) |
 | **RAG** | LangChain + ChromaDB |
@@ -239,6 +248,7 @@ ContextIQ/
 | **PDF** | fpdf2 (Unicode Hindi support) |
 | **Email** | SMTP (smtplib) |
 | **Teams** | Microsoft Incoming Webhook |
+| **Jira** | Atlassian REST API v3 |
 | **Audio** | FFmpeg |
 | **ML** | PyTorch (CUDA 12.8) |
 | **Streaming** | Server-Sent Events (SSE) |
@@ -257,6 +267,8 @@ ContextIQ/
 | **NVIDIA GPU + CUDA** *(optional)* | 3–5× faster transcription |
 | **HuggingFace account** | pyannote diarization models |
 | **Groq API key** | LLM inference ([get free key](https://console.groq.com/keys)) |
+| **AssemblyAI API key** *(optional)* | Primary STT ([get key](https://www.assemblyai.com/)) |
+| **Jira account** *(optional)* | Action item management ([Atlassian](https://www.atlassian.com/)) |
 
 ### Backend Setup
 
@@ -282,14 +294,23 @@ npm install
 FFMPEG_PATH=C:/path/to/ffmpeg.exe
 HF_TOKEN=hf_your_huggingface_token
 GROQ_API_KEY=gsk_your_groq_api_key
-OPENROUTER_API_KEY=sk-or-your_openrouter_key   # For RAG chatbot
 
-# Optional
+# Speech-to-Text (assemblyai | groq | local | auto)
+STT_MODE=assemblyai
+ASSEMBLYAI_API_KEY=your_assemblyai_key
+
+# Optional — Publishing
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your@gmail.com
 SMTP_PASSWORD=your-app-password
 TEAMS_WEBHOOK_URL=https://your-org.webhook.office.com/...
+
+# Optional — Jira Integration
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@domain.com
+JIRA_API_TOKEN=your_jira_api_token
+JIRA_PROJECT_KEY=PROJ
 ```
 
 ### Run
@@ -334,12 +355,12 @@ flowchart LR
 | Feature | Otter.ai | Fireflies | Gong | ContextIQ |
 |---------|----------|-----------|------|-----------|
 | **Hindi summaries** | ❌ | ❌ | ❌ | ✅ |
-| **Fully local STT** | ❌ Cloud | ❌ Cloud | ❌ Cloud | ✅ On-device |
+| **Multi-engine STT** | Single | Single | Single | ✅ AssemblyAI + Groq + WhisperX |
 | **Sentiment analysis** | ❌ | ❌ | Basic | ✅ Per-segment |
 | **RAG with citations** | ❌ | Basic | ❌ | ✅ Speaker+timestamp |
 | **SSE streaming chat** | ❌ | ❌ | ❌ | ✅ |
+| **Jira integration** | ❌ | ❌ | Basic | ✅ Bi-directional sync |
 | **HITL approval** | ❌ | ❌ | ❌ | ✅ |
-| **Subtitle export (SRT/VTT)** | ❌ | Premium | ❌ | ✅ Free |
 | **Full report PDF** | ❌ | ❌ | ❌ | ✅ |
 | **Self-hosted / free** | $20/mo | $19/mo | $100+/mo | ✅ Free |
 

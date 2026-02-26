@@ -181,3 +181,175 @@ async def analyze_sentiment(
         logger.error("[%s] Sentiment analysis failed: %s", meeting_id, e)
         raise HTTPException(status_code=500, detail=f"Sentiment analysis failed: {str(e)}")
     return result
+
+
+@router.post("/meeting/{meeting_id}/topics")
+async def extract_topics(
+    meeting_id: str,
+    force: bool = Query(False, description="Force regeneration even if cached"),
+):
+    """Extract topic segments — what was discussed when."""
+    logger.info("[%s] Topic segmentation requested (force=%s)", meeting_id, force)
+    try:
+        service = _get_insights_service()
+        result = service.extract_topics(meeting_id, force=force)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("[%s] Topic extraction failed: %s", meeting_id, e)
+        raise HTTPException(status_code=500, detail=f"Topic extraction failed: {str(e)}")
+    return result
+
+
+# ──────────────────────────────────────────────────────────────
+# Pure-computation analytics (no LLM needed)
+# ──────────────────────────────────────────────────────────────
+
+@router.get("/meeting/{meeting_id}/speaker-analytics")
+async def speaker_analytics(meeting_id: str):
+    """
+    Compute per-speaker analytics from the transcript:
+    talk-time, word count, words-per-minute, interruption count.
+    Pure math — no LLM call required.
+    """
+    transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
+    if not transcript_path.exists():
+        raise HTTPException(status_code=404, detail="Transcript not found. Run transcription first.")
+
+    with open(transcript_path, "r", encoding="utf-8") as f:
+        transcript = json.load(f)
+
+    segments = transcript.get("segments", [])
+    if not segments:
+        return {"meeting_id": meeting_id, "speakers": [], "total_duration": 0}
+
+    # Load speaker map for display names
+    smap = {}
+    smap_path = STORAGE_DIR / meeting_id / "speaker_map.json"
+    if smap_path.exists():
+        with open(smap_path, "r", encoding="utf-8") as f:
+            smap = json.load(f)
+
+    # Compute per-speaker stats
+    stats = {}
+    for seg in segments:
+        spk = seg.get("speaker", "UNKNOWN")
+        text = seg.get("text", "").strip()
+        start = seg.get("start", 0)
+        end = seg.get("end", 0)
+        duration = max(0, end - start)
+        words = len(text.split()) if text else 0
+
+        if spk not in stats:
+            stats[spk] = {
+                "talk_time": 0,
+                "word_count": 0,
+                "segment_count": 0,
+                "interruptions": 0,
+            }
+        stats[spk]["talk_time"] += duration
+        stats[spk]["word_count"] += words
+        stats[spk]["segment_count"] += 1
+
+    # Detect interruptions (speaker changes where the gap is < 0.5s)
+    for i in range(1, len(segments)):
+        prev = segments[i - 1]
+        curr = segments[i]
+        if prev.get("speaker") != curr.get("speaker"):
+            gap = curr.get("start", 0) - prev.get("end", 0)
+            if gap < 0.5:
+                spk = curr.get("speaker", "UNKNOWN")
+                if spk in stats:
+                    stats[spk]["interruptions"] += 1
+
+    total_talk = sum(s["talk_time"] for s in stats.values()) or 1
+    total_dur = max(seg.get("end", 0) for seg in segments) if segments else 0
+
+    result = []
+    for spk, s in sorted(stats.items(), key=lambda x: x[1]["talk_time"], reverse=True):
+        wpm = round(s["word_count"] / (s["talk_time"] / 60)) if s["talk_time"] > 0 else 0
+        result.append({
+            "speaker_id": spk,
+            "display_name": smap.get(spk, spk),
+            "talk_time_seconds": round(s["talk_time"], 1),
+            "talk_time_percent": round((s["talk_time"] / total_talk) * 100, 1),
+            "word_count": s["word_count"],
+            "words_per_minute": wpm,
+            "segment_count": s["segment_count"],
+            "interruptions": s["interruptions"],
+        })
+
+    return {
+        "meeting_id": meeting_id,
+        "total_duration": round(total_dur, 1),
+        "total_speakers": len(result),
+        "speakers": result,
+    }
+
+
+@router.get("/meeting/{meeting_id}/keywords")
+async def keyword_cloud(meeting_id: str):
+    """
+    Extract top keywords from transcript.
+    Pure computation — word frequency with stop-word filtering.
+    """
+    transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
+    if not transcript_path.exists():
+        raise HTTPException(status_code=404, detail="Transcript not found. Run transcription first.")
+
+    with open(transcript_path, "r", encoding="utf-8") as f:
+        transcript = json.load(f)
+
+    segments = transcript.get("segments", [])
+    full_text = " ".join(seg.get("text", "") for seg in segments).lower()
+
+    # Common English stop words
+    stop_words = {
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+        "of", "with", "by", "from", "is", "it", "that", "this", "was", "are",
+        "be", "has", "have", "had", "do", "does", "did", "will", "would",
+        "could", "should", "may", "might", "can", "shall", "not", "no", "so",
+        "if", "then", "than", "too", "very", "just", "about", "up", "out",
+        "all", "also", "as", "into", "its", "my", "we", "our", "you", "your",
+        "they", "their", "them", "he", "she", "his", "her", "him", "me", "i",
+        "what", "which", "who", "when", "where", "how", "why", "been", "being",
+        "there", "here", "some", "any", "each", "every", "both", "few", "more",
+        "most", "other", "such", "only", "own", "same", "over", "after",
+        "before", "between", "through", "during", "above", "below", "again",
+        "further", "once", "like", "well", "back", "even", "still", "way",
+        "much", "many", "these", "those", "get", "got", "going", "go", "went",
+        "come", "came", "make", "made", "take", "took", "know", "knew",
+        "think", "thought", "say", "said", "see", "saw", "want", "need",
+        "use", "used", "one", "two", "first", "new", "now", "look", "people",
+        "time", "thing", "right", "yeah", "yes", "okay", "ok", "um", "uh",
+        "oh", "ah", "hmm", "actually", "really", "basically", "something",
+        "kind", "let", "good", "don't", "didn't", "won't", "can't", "it's",
+        "that's", "i'm", "we're", "you're", "they're", "there's", "what's",
+    }
+
+    # Tokenize and count
+    import re
+    words = re.findall(r"[a-z']{3,}", full_text)
+    freq = {}
+    for w in words:
+        if w not in stop_words and len(w) >= 3:
+            freq[w] = freq.get(w, 0) + 1
+
+    # Sort by frequency, top 30
+    sorted_words = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:30]
+
+    max_count = sorted_words[0][1] if sorted_words else 1
+    keywords = []
+    for word, count in sorted_words:
+        keywords.append({
+            "word": word,
+            "count": count,
+            "weight": round(count / max_count, 2),  # 0.0-1.0 for sizing
+        })
+
+    return {
+        "meeting_id": meeting_id,
+        "total_unique_words": len(freq),
+        "keywords": keywords,
+    }
+

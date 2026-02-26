@@ -1,7 +1,8 @@
 <script>
-    import { Video, MessageSquare, Target, Home } from "lucide-svelte";
+    import { Video, MessageSquare, Target, Home, Loader2 } from "lucide-svelte";
     import { location } from "svelte-spa-router";
     import Logo from "./Logo.svelte";
+    import { uploadState } from "../lib/stores.js";
 
     const navItems = [
         { path: "/", label: "Home", icon: Home },
@@ -50,11 +51,30 @@
             {/each}
         </nav>
 
-        <!-- Avatar -->
-        <div
-            class="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-sm font-bold shadow-md"
-        >
-            P
+        <div class="flex items-center gap-3">
+            <!-- Global Processing Badge -->
+            {#if $uploadState.uploading}
+                <div
+                    class="flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 rounded-lg px-3 py-1.5"
+                >
+                    <Loader2 size={13} class="text-emerald-400 animate-spin" />
+                    <span
+                        class="text-[11px] text-emerald-300 font-medium max-w-[160px] truncate"
+                    >
+                        {$uploadState.processing ? "Processing…" : "Uploading…"}
+                    </span>
+                    <span
+                        class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
+                    ></span>
+                </div>
+            {/if}
+
+            <!-- Avatar -->
+            <div
+                class="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-sm font-bold shadow-md"
+            >
+                P
+            </div>
         </div>
     </div>
 </header>

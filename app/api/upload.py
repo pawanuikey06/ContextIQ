@@ -7,6 +7,7 @@ Includes SHA-256 deduplication — re-uploading same file returns existing meeti
 import uuid
 import hashlib
 import json
+import shutil
 import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pathlib import Path
@@ -27,6 +28,9 @@ STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Hash registry for deduplication
 HASH_REGISTRY = STORAGE_DIR / "_file_hashes.json"
+
+# Max upload size: 500 MB
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
 
 def _load_hashes() -> dict:
@@ -58,6 +62,11 @@ async def upload_video(file: UploadFile = File(...)):
 
     # Read file bytes
     video_bytes = await file.read()
+    if len(video_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({len(video_bytes) // (1024*1024)} MB). Max: {MAX_UPLOAD_BYTES // (1024*1024)} MB"
+        )
     logger.info("Upload received: %s (%d bytes)", file.filename, len(video_bytes))
 
     # ── Deduplication: compute SHA-256 hash ──
@@ -120,7 +129,6 @@ async def upload_video(file: UploadFile = File(...)):
             meeting_dir.mkdir(parents=True, exist_ok=True)
             saved_video = meeting_dir / "video.mp4"
             try:
-                import shutil
                 shutil.move(str(temp_video_path), str(saved_video))
                 logger.info("[%s] Video saved: %s", meeting_id, saved_video)
             except Exception:

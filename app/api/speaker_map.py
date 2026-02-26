@@ -35,8 +35,8 @@ async def save_speaker_map(meeting_id: str, body: SpeakerMapRequest):
 
     # Auto-reindex in RAG so chat uses mapped names
     try:
-        from app.services.rag_service import MeetingRAGService
-        rag = MeetingRAGService()
+        from app.api.chat import _get_rag_service
+        rag = _get_rag_service()
         transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
         if transcript_path.exists():
             count = rag.ingest_meeting(meeting_id)

@@ -14,3 +14,11 @@ export const summaryApproved = writable(false);
 
 // Action items data
 export const actionItemsData = writable(null);
+
+// ── Upload / Processing pipeline state (persists across navigation) ──
+export const uploadState = writable({
+  uploading: false,
+  processing: false,
+  progress: '',
+  meetingId: null,
+});

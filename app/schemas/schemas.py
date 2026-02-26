@@ -83,7 +83,13 @@ class MeetingMetadataResponse(BaseModel):
     participants: Optional[List[str]] = None
     notes: Optional[str] = None
     tags: Optional[List[str]] = None
+    status: Optional[str] = None
+    segment_count: Optional[int] = None
+    speaker_count: Optional[int] = None
+    auto_title: Optional[str] = None
+    processed_at: Optional[str] = None
     processed_date: Optional[str] = None
     processed_day: Optional[str] = None
     processed_time: Optional[str] = None
+
 

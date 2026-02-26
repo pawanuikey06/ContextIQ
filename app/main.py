@@ -15,7 +15,6 @@ from app.api.speaker_map import router as speaker_map_router
 from app.api.chat import router as chat_router
 from app.api.insights import router as insights_router
 from app.api.stats import router as stats_router
-from app.api.subtitles import router as subtitles_router
 from app.api.search import router as search_router
 from app.api.jira import router as jira_router
 
@@ -55,7 +54,6 @@ app.include_router(speaker_map_router, tags=["Speaker Map"])
 app.include_router(chat_router, tags=["Chat"])
 app.include_router(insights_router, tags=["Insights"])
 app.include_router(stats_router, tags=["Stats"])
-app.include_router(subtitles_router, tags=["Subtitles"])
 app.include_router(search_router, tags=["Search"])
 app.include_router(jira_router, tags=["Jira"])
 
@@ -91,14 +89,16 @@ async def root():
             "POST /meeting/{meeting_id}/requirements",
             "POST /meeting/{meeting_id}/documentation",
             "POST /meeting/{meeting_id}/sentiment",
-            "GET  /meeting/{meeting_id}/subtitles/srt",
-            "GET  /meeting/{meeting_id}/subtitles/vtt",
+            "GET  /meeting/{meeting_id}/speaker-analytics",
+            "GET  /meeting/{meeting_id}/keywords",
             "GET  /search?q=keyword",
             "GET  /meeting/{meeting_id}/video",
             "GET  /stats",
             "GET  /health",
             "GET  /jira/status",
             "POST /meeting/{meeting_id}/jira/push",
+            "POST /meeting/{meeting_id}/jira/sync",
+            "PUT  /meeting/{meeting_id}/jira/update",
         ]
     }
 

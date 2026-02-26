@@ -18,6 +18,7 @@ export const api = {
   keywords: (id) => `${API_BASE}/meeting/${id}/keywords`,
   topics: (id) => `${API_BASE}/meeting/${id}/topics`,
   stats: `${API_BASE}/stats`,
+  cultureScore: `${API_BASE}/stats/culture-score`,
   search: (q) => `${API_BASE}/search?q=${encodeURIComponent(q)}`,
   jiraStatus: `${API_BASE}/jira/status`,
   jiraPush: (id) => `${API_BASE}/meeting/${id}/jira/push`,

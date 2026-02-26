@@ -11,6 +11,11 @@
         ArrowUpRight,
         Search,
         X,
+        Activity,
+        Heart,
+        Smile,
+        CheckCircle2,
+        Zap,
     } from "lucide-svelte";
     import { api, get, post } from "../lib/api.js";
     import { formatTime, shortId } from "../lib/utils.js";
@@ -28,6 +33,67 @@
     let searchQuery = "";
     let numSpeakers = "";
 
+    // Culture Score
+    let cultureScore = null;
+    let loadingCulture = true;
+
+    // Computed culture score values
+    $: csReady =
+        !loadingCulture && cultureScore && cultureScore.total_scored > 0;
+    $: csScore = cultureScore?.overall_score ?? 0;
+    $: csGrade = cultureScore?.grade ?? "";
+    $: csSignals = cultureScore?.signal_scores ?? {};
+    $: csTrend = (cultureScore?.per_meeting ?? []).filter(
+        (m) => m.score !== null,
+    );
+    $: csColor =
+        csScore >= 80
+            ? "#10b981"
+            : csScore >= 60
+              ? "#f59e0b"
+              : csScore >= 40
+                ? "#f97316"
+                : "#ef4444";
+    $: csGradeBg =
+        csScore >= 80
+            ? "bg-emerald-50 border-emerald-200"
+            : csScore >= 60
+              ? "bg-amber-50 border-amber-200"
+              : csScore >= 40
+                ? "bg-orange-50 border-orange-200"
+                : "bg-red-50 border-red-200";
+    $: csSignalList = [
+        {
+            key: "speaker_balance",
+            label: "Speaker Balance",
+            icon: Users,
+            color: "#3b82f6",
+        },
+        { key: "sentiment", label: "Sentiment", icon: Smile, color: "#10b981" },
+        {
+            key: "completion",
+            label: "Task Completion",
+            icon: CheckCircle2,
+            color: "#8b5cf6",
+        },
+        { key: "efficiency", label: "Efficiency", icon: Zap, color: "#f59e0b" },
+    ].filter((s) => csSignals[s.key] != null);
+    // Sparkline computed
+    $: sparkScores = csTrend.map((m) => m.score);
+    $: sparkMin = sparkScores.length > 0 ? Math.min(...sparkScores) : 0;
+    $: sparkMax = sparkScores.length > 0 ? Math.max(...sparkScores) : 100;
+    $: sparkRange = sparkMax - sparkMin || 1;
+    $: sparkPoints = sparkScores
+        .map((s, i) => {
+            const x =
+                sparkScores.length > 1
+                    ? (i / (sparkScores.length - 1)) * 160
+                    : 80;
+            const y = 50 - ((s - sparkMin) / sparkRange) * 42 - 4;
+            return `${x},${y}`;
+        })
+        .join(" ");
+
     $: filteredMeetings = searchQuery.trim()
         ? meetings.filter((m) =>
               m.title?.toLowerCase().includes(searchQuery.trim().toLowerCase()),
@@ -35,7 +101,7 @@
         : meetings;
 
     onMount(async () => {
-        await Promise.all([loadMeetings(), loadStats()]);
+        await Promise.all([loadMeetings(), loadStats(), loadCultureScore()]);
     });
 
     async function loadStats() {
@@ -48,6 +114,16 @@
         } catch {
             // Fall back to meeting list stats
         }
+    }
+
+    async function loadCultureScore() {
+        loadingCulture = true;
+        try {
+            cultureScore = await get(api.cultureScore);
+        } catch {
+            cultureScore = null;
+        }
+        loadingCulture = false;
     }
 
     async function loadMeetings() {
@@ -297,6 +373,183 @@
             </div>
         </div>
     </div>
+
+    <!-- Meeting Culture Score -->
+    {#if csReady}
+        <div class="mb-10">
+            <p
+                class="text-emerald-600 text-xs font-bold uppercase tracking-[0.15em] mb-3"
+            >
+                Meeting Health
+            </p>
+            <div
+                class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
+            >
+                <div class="flex flex-col sm:flex-row gap-6">
+                    <!-- Score Gauge -->
+                    <div
+                        class="flex flex-col items-center justify-center sm:min-w-[160px]"
+                    >
+                        <div class="relative w-28 h-28">
+                            <svg viewBox="0 0 120 120" class="w-full h-full">
+                                <circle
+                                    cx="60"
+                                    cy="60"
+                                    r="52"
+                                    fill="none"
+                                    stroke="#f3f4f6"
+                                    stroke-width="8"
+                                />
+                                <circle
+                                    cx="60"
+                                    cy="60"
+                                    r="52"
+                                    fill="none"
+                                    stroke={csColor}
+                                    stroke-width="8"
+                                    stroke-linecap="round"
+                                    stroke-dasharray="{(326.7 * csScore) /
+                                        100} {326.7 * (1 - csScore / 100)}"
+                                    stroke-dashoffset="81.7"
+                                    class="transition-all duration-1000 ease-out"
+                                />
+                            </svg>
+                            <div
+                                class="absolute inset-0 flex flex-col items-center justify-center"
+                            >
+                                <span
+                                    class="text-3xl font-extrabold"
+                                    style="color: {csColor}">{csScore}</span
+                                >
+                                <span
+                                    class="text-[10px] text-gray-400 font-semibold uppercase tracking-wider"
+                                    >/100</span
+                                >
+                            </div>
+                        </div>
+                        <span
+                            class="mt-2 text-xs font-bold px-3 py-1 rounded-full {csGradeBg}"
+                            style="color: {csColor}"
+                        >
+                            {csGrade}
+                        </span>
+                    </div>
+
+                    <!-- Signal Breakdown -->
+                    <div class="flex-1 flex flex-col justify-center gap-3">
+                        {#each csSignalList as sig}
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="w-5 h-5 flex items-center justify-center flex-shrink-0"
+                                >
+                                    <svelte:component
+                                        this={sig.icon}
+                                        size={14}
+                                        color={sig.color}
+                                    />
+                                </div>
+                                <div class="flex-1">
+                                    <div
+                                        class="flex items-center justify-between mb-0.5"
+                                    >
+                                        <span
+                                            class="text-xs font-semibold text-gray-700"
+                                            >{sig.label}</span
+                                        >
+                                        <span
+                                            class="text-xs font-bold"
+                                            style="color: {sig.color}"
+                                            >{Math.round(
+                                                csSignals[sig.key],
+                                            )}</span
+                                        >
+                                    </div>
+                                    <div
+                                        class="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden"
+                                    >
+                                        <div
+                                            class="h-full rounded-full transition-all duration-700 ease-out"
+                                            style="width: {csSignals[
+                                                sig.key
+                                            ]}%; background: {sig.color}"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                        {/each}
+                    </div>
+
+                    <!-- Trend Sparkline -->
+                    {#if csTrend.length >= 2}
+                        <div
+                            class="sm:min-w-[180px] flex flex-col justify-center"
+                        >
+                            <p
+                                class="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-2 text-center"
+                            >
+                                Score Trend
+                            </p>
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <svg
+                                    viewBox="0 0 160 66"
+                                    class="w-full"
+                                    style="height: 66px;"
+                                >
+                                    <polyline
+                                        fill="none"
+                                        stroke={csColor}
+                                        stroke-width="2"
+                                        stroke-linejoin="round"
+                                        stroke-linecap="round"
+                                        points={sparkPoints}
+                                    />
+                                    {#each sparkScores as s, i}
+                                        <circle
+                                            cx={sparkScores.length > 1
+                                                ? (i /
+                                                      (sparkScores.length -
+                                                          1)) *
+                                                  160
+                                                : 80}
+                                            cy={50 -
+                                                ((s - sparkMin) / sparkRange) *
+                                                    42 -
+                                                4}
+                                            r="3"
+                                            fill="white"
+                                            stroke={csColor}
+                                            stroke-width="1.5"
+                                        />
+                                    {/each}
+                                    <text
+                                        x="0"
+                                        y="62"
+                                        font-size="8"
+                                        fill="#9ca3af"
+                                        font-family="sans-serif"
+                                        >{csTrend[0].date?.slice(5) ||
+                                            "1"}</text
+                                    >
+                                    <text
+                                        x="160"
+                                        y="62"
+                                        font-size="8"
+                                        fill="#9ca3af"
+                                        font-family="sans-serif"
+                                        text-anchor="end"
+                                        >{csTrend[
+                                            csTrend.length - 1
+                                        ].date?.slice(5) ||
+                                            String(csTrend.length)}</text
+                                    >
+                                </svg>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            </div>
+        </div>
+    {/if}
 
     <!-- Meetings Table -->
     <div>

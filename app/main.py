@@ -86,6 +86,7 @@ async def root():
             "PUT  /meeting/{meeting_id}/action-items",
             "POST /meeting/{meeting_id}/auto-title",
             "POST /meeting/{meeting_id}/followup-email",
+            "POST /meeting/{meeting_id}/followup-email/send",
             "POST /meeting/{meeting_id}/requirements",
             "POST /meeting/{meeting_id}/documentation",
             "POST /meeting/{meeting_id}/sentiment",

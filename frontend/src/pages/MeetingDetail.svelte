@@ -20,6 +20,7 @@
         Activity,
         Tag,
         Layers,
+        UserCheck,
     } from "lucide-svelte";
     import { toasts } from "../lib/toast.js";
     import { api, get, post } from "../lib/api.js";
@@ -93,6 +94,10 @@
     // Topic Segmentation
     let topicsData = null;
     let loadingTopics = false;
+
+    // Speaker Report Cards
+    let speakerReportData = null;
+    let loadingSpeakerReport = false;
 
     const tabs = [
         {
@@ -184,6 +189,15 @@
             bg: "bg-indigo-50",
             border: "border-indigo-100",
             desc: "Topic segmentation — what was discussed when during the meeting.",
+        },
+        {
+            id: "speakerReport",
+            label: "Speaker Report",
+            icon: UserCheck,
+            color: "text-teal-600",
+            bg: "bg-teal-50",
+            border: "border-teal-100",
+            desc: "Per-speaker report cards with role classification and comprehensive metrics.",
         },
     ];
 
@@ -2780,6 +2794,158 @@
                                 {/each}
                             </tbody>
                         </table>
+                    </div>
+                {/if}
+            </div>
+        {/if}
+
+        <!-- ═══════════════════ SPEAKER REPORT CARDS ═══════════════════ -->
+        {#if activeTab === "speakerReport"}
+            <div class="max-w-5xl space-y-6">
+                <div class="flex items-center justify-between">
+                    <p class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]">Speaker Report Cards</p>
+                    <button
+                        class="btn-secondary text-sm"
+                        on:click={async () => {
+                            loadingSpeakerReport = true;
+                            try {
+                                speakerReportData = await get(api.speakerReport(meetingId));
+                            } catch (e) {
+                                toasts.error("Failed to load speaker report");
+                            } finally {
+                                loadingSpeakerReport = false;
+                            }
+                        }}
+                        disabled={loadingSpeakerReport}
+                    >
+                        {#if loadingSpeakerReport}
+                            <Loader2 size={14} class="animate-spin" /> Loading…
+                        {:else}
+                            <UserCheck size={14} />
+                            {speakerReportData ? "Refresh" : "Generate Report Cards"}
+                        {/if}
+                    </button>
+                </div>
+
+                {#if !speakerReportData}
+                    <div class="bg-white border border-surface-200 rounded-2xl p-10 text-center">
+                        <div class="w-12 h-12 mx-auto rounded-xl bg-teal-100 flex items-center justify-center mb-4">
+                            <UserCheck size={22} class="text-teal-600" />
+                        </div>
+                        <h3 class="text-base font-semibold text-txt-primary mb-1">Speaker Report Cards</h3>
+                        <p class="text-sm text-txt-muted max-w-sm mx-auto">Click "Generate Report Cards" to see comprehensive per-speaker scorecards with role classification, sentiment, and more.</p>
+                    </div>
+                {:else}
+                    <!-- Card Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                        {#each speakerReportData.speakers as s, i}
+                            {@const roleColors = {
+                                'Decision Maker': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: '🎯' },
+                                'Presenter': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '🎤' },
+                                'Challenger': { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '❓' },
+                                'Doer': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✅' },
+                                'Observer': { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', icon: '👂' },
+                                'Contributor': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', icon: '💬' },
+                            }}
+                            {@const rc = roleColors[s.role] || roleColors['Contributor']}
+                            {@const sentColor = s.sentiment.dominant === 'positive' ? '#10b981' : s.sentiment.dominant === 'negative' ? '#ef4444' : '#64748b'}
+                            {@const sentEmoji = s.sentiment.dominant === 'positive' ? '😊' : s.sentiment.dominant === 'negative' ? '😟' : '😐'}
+                            <div class="bg-white border border-surface-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                <!-- Header -->
+                                <div class="p-4 pb-3 border-b border-surface-100">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                                            style="background-color: {getColor(s.speaker_id)}"
+                                        >
+                                            {s.display_name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <h4 class="text-sm font-bold text-txt-primary truncate">{s.display_name}</h4>
+                                            <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border {rc.bg} {rc.text} {rc.border}">
+                                                {rc.icon} {s.role}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Stats Grid -->
+                                <div class="p-4 space-y-3">
+                                    <!-- Talk Time -->
+                                    <div>
+                                        <div class="flex justify-between text-[11px] mb-1">
+                                            <span class="text-txt-faint font-medium">🎤 Talk Time</span>
+                                            <span class="font-bold text-txt-primary">{s.talk_time_percent}%</span>
+                                        </div>
+                                        <div class="w-full bg-surface-100 rounded-full h-2">
+                                            <div
+                                                class="h-full rounded-full transition-all duration-500"
+                                                style="width: {s.talk_time_percent}%; background-color: {getColor(s.speaker_id)}"
+                                            ></div>
+                                        </div>
+                                        <span class="text-[9px] text-txt-faint">{Math.floor(s.talk_time_seconds / 60)}m {Math.round(s.talk_time_seconds % 60)}s · {s.words_per_minute} WPM</span>
+                                    </div>
+
+                                    <!-- Key Metrics Row -->
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <div class="bg-surface-50 rounded-lg p-2 text-center">
+                                            <span class="text-lg font-extrabold text-blue-600">{s.word_count}</span>
+                                            <p class="text-[9px] text-txt-faint uppercase">Words</p>
+                                        </div>
+                                        <div class="bg-surface-50 rounded-lg p-2 text-center">
+                                            <span class="text-lg font-extrabold text-purple-600">{s.questions_asked}</span>
+                                            <p class="text-[9px] text-txt-faint uppercase">Questions</p>
+                                        </div>
+                                        <div class="bg-surface-50 rounded-lg p-2 text-center">
+                                            <span class="text-lg font-extrabold text-amber-600">{s.interruptions}</span>
+                                            <p class="text-[9px] text-txt-faint uppercase">Interrupts</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Items & Decisions -->
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100">
+                                            <span class="text-[10px] text-emerald-700 font-semibold">📋 Action Items</span>
+                                            <p class="text-lg font-extrabold text-emerald-600">{s.action_items_assigned}</p>
+                                        </div>
+                                        <div class="bg-amber-50/50 rounded-lg p-2 border border-amber-100">
+                                            <span class="text-[10px] text-amber-700 font-semibold">⚡ Decisions</span>
+                                            <p class="text-lg font-extrabold text-amber-600">{s.decisions_attributed}</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Sentiment -->
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm">{sentEmoji}</span>
+                                        <div class="flex-1">
+                                            <span class="text-[10px] font-semibold capitalize" style="color: {sentColor}">{s.sentiment.dominant}</span>
+                                            <div class="flex gap-0.5 mt-1 h-1.5 rounded-full overflow-hidden bg-surface-100">
+                                                {#if s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral > 0}
+                                                    <div class="bg-emerald-400 h-full" style="width: {(s.sentiment.positive / (s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral)) * 100}%"></div>
+                                                    <div class="bg-slate-300 h-full" style="width: {(s.sentiment.neutral / (s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral)) * 100}%"></div>
+                                                    <div class="bg-red-400 h-full" style="width: {(s.sentiment.negative / (s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral)) * 100}%"></div>
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Topics -->
+                                    {#if s.topics.length > 0}
+                                        <div>
+                                            <span class="text-[10px] text-txt-faint font-medium">🏷️ Topics</span>
+                                            <div class="flex flex-wrap gap-1 mt-1">
+                                                {#each s.topics.slice(0, 3) as topic}
+                                                    <span class="text-[9px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100 truncate max-w-[120px]">{topic}</span>
+                                                {/each}
+                                                {#if s.topics.length > 3}
+                                                    <span class="text-[9px] px-1.5 py-0.5 bg-surface-100 text-txt-faint rounded-full">+{s.topics.length - 3}</span>
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 {/if}
             </div>

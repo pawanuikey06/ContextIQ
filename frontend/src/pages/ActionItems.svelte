@@ -21,6 +21,11 @@
         ShieldCheck,
         ArrowUpRight,
         Send,
+        Mail,
+        Copy,
+        Check,
+        Plus,
+        Trash2,
     } from "lucide-svelte";
     import { api, get, post, put } from "../lib/api.js";
     import { shortId } from "../lib/utils.js";
@@ -51,6 +56,17 @@
     let pushingJira = false;
     let syncingJira = false;
     let jiraPushResult = null;
+
+    // Follow-up email state
+    let showEmailModal = false;
+    let generatingEmail = false;
+    let sendingEmail = false;
+    let emailData = null;
+    let emailSubject = "";
+    let emailBody = "";
+    let emailRecipients = [""];
+    let emailCopied = false;
+    let emailSent = false;
 
     const statusOptions = ["To Do", "In Progress", "In Review", "Done"];
     const priorityOptions = ["High", "Medium", "Low"];
@@ -315,6 +331,86 @@
         }
         syncingJira = false;
     }
+
+    // ── Follow-up Email Functions ──
+    async function openEmailModal() {
+        showEmailModal = true;
+        emailSent = false;
+        emailCopied = false;
+        generatingEmail = true;
+        try {
+            const result = await post(
+                api.followupEmail(selectedMeeting),
+                null,
+                120000,
+            );
+            emailData = result;
+            emailSubject = result.subject || "";
+            emailBody = result.body || "";
+            emailRecipients = result.recipients_suggested?.length
+                ? [...result.recipients_suggested]
+                : [""];
+        } catch (err) {
+            toasts.error("Failed to generate email: " + err.message);
+            showEmailModal = false;
+        }
+        generatingEmail = false;
+    }
+
+    function closeEmailModal() {
+        showEmailModal = false;
+        emailData = null;
+        emailSent = false;
+    }
+
+    function addRecipient() {
+        emailRecipients = [...emailRecipients, ""];
+    }
+
+    function removeRecipient(idx) {
+        emailRecipients = emailRecipients.filter((_, i) => i !== idx);
+        if (emailRecipients.length === 0) emailRecipients = [""];
+    }
+
+    async function sendFollowupEmail() {
+        const validRecipients = emailRecipients.filter(
+            (r) => r.trim() && r.includes("@"),
+        );
+        if (validRecipients.length === 0) {
+            toasts.error("Please enter at least one valid email address.");
+            return;
+        }
+        sendingEmail = true;
+        try {
+            const result = await post(
+                api.followupEmailSend(selectedMeeting),
+                {
+                    recipients: validRecipients,
+                    subject: emailSubject,
+                    body: emailBody,
+                },
+                30000,
+            );
+            if (result.success) {
+                emailSent = true;
+                toasts.success(result.message || "Email sent successfully!");
+            } else {
+                toasts.error(result.message || "Failed to send email.");
+            }
+        } catch (err) {
+            toasts.error("Send failed: " + err.message);
+        }
+        sendingEmail = false;
+    }
+
+    function copyEmailToClipboard() {
+        const text = `Subject: ${emailSubject}\n\n${emailBody}`;
+        navigator.clipboard.writeText(text).then(() => {
+            emailCopied = true;
+            toasts.success("Email copied to clipboard!");
+            setTimeout(() => (emailCopied = false), 2000);
+        });
+    }
 </script>
 
 <div class="max-w-5xl mx-auto px-6 py-10">
@@ -364,6 +460,21 @@
                     {:else}
                         <RotateCcw size={14} />
                         Sync from Jira
+                    {/if}
+                </button>
+            {/if}
+            {#if actionData}
+                <button
+                    class="bg-violet-600 hover:bg-violet-700 text-white font-medium px-4 py-2 rounded-xl transition-all inline-flex items-center gap-2 text-sm shadow-sm"
+                    on:click={openEmailModal}
+                    disabled={generatingEmail}
+                >
+                    {#if generatingEmail}
+                        <Loader2 size={14} class="animate-spin" />
+                        Generating…
+                    {:else}
+                        <Mail size={14} />
+                        Follow-up Email
                     {/if}
                 </button>
             {/if}
@@ -1242,3 +1353,181 @@
         {/if}
     {/if}
 </div>
+
+<!-- ═══════════ FOLLOW-UP EMAIL MODAL ═══════════ -->
+{#if showEmailModal}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        on:click|self={closeEmailModal}
+    >
+        <div
+            class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        >
+            <!-- Modal Header -->
+            <div
+                class="flex items-center justify-between px-6 py-4 border-b border-gray-100"
+            >
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center"
+                    >
+                        <Mail size={20} class="text-violet-600" />
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900">
+                            Follow-up Email
+                        </h2>
+                        <p class="text-xs text-gray-400">
+                            AI-generated • Review and send
+                        </p>
+                    </div>
+                </div>
+                <button
+                    on:click={closeEmailModal}
+                    class="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                    <X size={18} class="text-gray-400" />
+                </button>
+            </div>
+
+            {#if generatingEmail}
+                <div class="flex-1 flex items-center justify-center py-20">
+                    <div class="text-center">
+                        <Loader2
+                            size={32}
+                            class="animate-spin text-violet-500 mx-auto mb-3"
+                        />
+                        <p class="text-sm font-medium text-gray-600">
+                            Generating follow-up email...
+                        </p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            Analyzing meeting summary & action items
+                        </p>
+                    </div>
+                </div>
+            {:else if emailSent}
+                <div class="flex-1 flex items-center justify-center py-20">
+                    <div class="text-center">
+                        <div
+                            class="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4"
+                        >
+                            <Check size={32} class="text-emerald-600" />
+                        </div>
+                        <h3 class="text-lg font-bold text-gray-900 mb-1">
+                            Email Sent!
+                        </h3>
+                        <p class="text-sm text-gray-500">
+                            Follow-up email sent to {emailRecipients.filter(
+                                (r) => r.includes("@"),
+                            ).length} recipient(s)
+                        </p>
+                        <button
+                            on:click={closeEmailModal}
+                            class="mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition-colors"
+                            >Done</button
+                        >
+                    </div>
+                </div>
+            {:else}
+                <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                    <!-- Recipients -->
+                    <div>
+                        <label
+                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2"
+                            >Recipients</label
+                        >
+                        {#each emailRecipients as recipient, idx}
+                            <div class="flex items-center gap-2 mb-2">
+                                <input
+                                    type="email"
+                                    bind:value={emailRecipients[idx]}
+                                    placeholder="email@example.com"
+                                    class="flex-1 px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all"
+                                />
+                                {#if emailRecipients.length > 1}
+                                    <button
+                                        on:click={() => removeRecipient(idx)}
+                                        class="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                    >
+                                        <Trash2
+                                            size={14}
+                                            class="text-red-400"
+                                        />
+                                    </button>
+                                {/if}
+                            </div>
+                        {/each}
+                        <button
+                            on:click={addRecipient}
+                            class="text-xs font-medium text-violet-600 hover:text-violet-700 inline-flex items-center gap-1 mt-1 transition-colors"
+                        >
+                            <Plus size={12} /> Add recipient
+                        </button>
+                    </div>
+
+                    <!-- Subject -->
+                    <div>
+                        <label
+                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2"
+                            >Subject</label
+                        >
+                        <input
+                            type="text"
+                            bind:value={emailSubject}
+                            class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-medium"
+                        />
+                    </div>
+
+                    <!-- Body -->
+                    <div>
+                        <label
+                            class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2"
+                            >Email Body</label
+                        >
+                        <textarea
+                            bind:value={emailBody}
+                            rows="14"
+                            class="w-full px-3.5 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all leading-relaxed resize-none font-mono"
+                        ></textarea>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div
+                    class="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/50"
+                >
+                    <button
+                        on:click={copyEmailToClipboard}
+                        class="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-2 hover:bg-gray-100 rounded-xl transition-all"
+                    >
+                        {#if emailCopied}
+                            <Check size={14} class="text-emerald-500" /> Copied!
+                        {:else}
+                            <Copy size={14} /> Copy to clipboard
+                        {/if}
+                    </button>
+                    <div class="flex items-center gap-3">
+                        <button
+                            on:click={closeEmailModal}
+                            class="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2.5 hover:bg-gray-100 rounded-xl transition-all"
+                            >Cancel</button
+                        >
+                        <button
+                            on:click={sendFollowupEmail}
+                            disabled={sendingEmail}
+                            class="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white font-medium px-5 py-2.5 rounded-xl text-sm inline-flex items-center gap-2 transition-all shadow-sm"
+                        >
+                            {#if sendingEmail}
+                                <Loader2 size={14} class="animate-spin" /> Sending…
+                            {:else}
+                                <Send size={14} /> Send Email
+                            {/if}
+                        </button>
+                    </div>
+                </div>
+            {/if}
+        </div>
+    </div>
+{/if}

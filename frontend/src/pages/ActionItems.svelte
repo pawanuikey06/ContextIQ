@@ -53,7 +53,7 @@
 
     // Jira integration
     let jiraConfigured = false;
-    let pushingJira = false;
+    let pushingJira = new Set();
     let syncingJira = false;
     let jiraPushResult = null;
 
@@ -283,7 +283,9 @@
 
     async function pushToJira(indices = null) {
         if (!selectedMeeting || !actionData) return;
-        pushingJira = true;
+        const trackIds = indices || actionData.action_items.map((_, i) => i);
+        trackIds.forEach((i) => pushingJira.add(i));
+        pushingJira = pushingJira; // trigger reactivity
         jiraPushResult = null;
         try {
             const result = await post(api.jiraPush(selectedMeeting), {
@@ -305,7 +307,8 @@
         } catch (err) {
             toasts.error("Jira push failed: " + err.message);
         }
-        pushingJira = false;
+        trackIds.forEach((i) => pushingJira.delete(i));
+        pushingJira = pushingJira; // trigger reactivity
     }
 
     async function pushSingleToJira(idx) {
@@ -982,11 +985,13 @@
                                                             pushSingleToJira(
                                                                 idx,
                                                             )}
-                                                        disabled={pushingJira}
+                                                        disabled={pushingJira.has(
+                                                            idx,
+                                                        )}
                                                         class="text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200/60 font-semibold px-2.5 py-1 rounded-lg text-[10px] inline-flex items-center gap-1 transition-colors"
                                                         title="Create Jira ticket for this item"
                                                     >
-                                                        {#if pushingJira}
+                                                        {#if pushingJira.has(idx)}
                                                             <Loader2
                                                                 size={10}
                                                                 class="animate-spin"

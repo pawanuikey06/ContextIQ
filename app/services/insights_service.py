@@ -793,12 +793,20 @@ RULES:
 
         full_text, segments = self._load_transcript_text(meeting_id)
 
-        # Build timestamped transcript for the LLM
+        # Load speaker map for name replacement
+        speaker_map = {}
+        map_path = STORAGE_DIR / meeting_id / "speaker_map.json"
+        if map_path.exists():
+            with open(map_path, "r", encoding="utf-8") as f:
+                speaker_map = json.load(f)
+
+        # Build timestamped transcript for the LLM (with mapped names)
         timestamped_lines = []
         for seg in segments:
             start = seg.get("start", 0)
             end = seg.get("end", 0)
-            speaker = seg.get("speaker", "UNKNOWN")
+            raw_speaker = seg.get("speaker", "UNKNOWN")
+            speaker = speaker_map.get(raw_speaker, raw_speaker)
             text = seg.get("text", "")
             timestamped_lines.append(
                 f"[{round(start,1)}s-{round(end,1)}s] {speaker}: {text}"

@@ -52,12 +52,62 @@ def _regenerate_all_insights(meeting_id: str):
     except Exception as e:
         logger.warning("[%s] Summary regeneration failed: %s", meeting_id, e)
 
-    # ── 3. Re-extract Action Items + Decisions ──
+    # ── 3. Re-extract Action Items + Decisions (preserve Jira links!) ──
     try:
         from app.services.insights_service import MeetingInsightsService
         insights = MeetingInsightsService()
+
+        # Save existing Jira links BEFORE regeneration
+        ai_path = STORAGE_DIR / meeting_id / "action_items.json"
+        old_jira_data = []
+        if ai_path.exists():
+            import json as _json
+            with open(ai_path, "r", encoding="utf-8") as f:
+                old_data = _json.load(f)
+            for item in old_data.get("action_items", []):
+                if item.get("jira_id"):
+                    old_jira_data.append({
+                        "task": item.get("task", ""),
+                        "jira_id": item["jira_id"],
+                        "jira_url": item.get("jira_url", ""),
+                        "status": item.get("status", "To Do"),
+                    })
+
+        # Regenerate with real names
         insights.extract_action_items(meeting_id, force=True)
-        logger.info("[%s] ✅ Action items regenerated with mapped names", meeting_id)
+
+        # Merge Jira links back into regenerated items
+        if old_jira_data and ai_path.exists():
+            import json as _json
+            with open(ai_path, "r", encoding="utf-8") as f:
+                new_data = _json.load(f)
+            new_items = new_data.get("action_items", [])
+
+            for old in old_jira_data:
+                best_match = None
+                best_score = 0
+                old_words = set(old["task"].lower().split())
+                for new_item in new_items:
+                    if new_item.get("jira_id"):
+                        continue  # already has a link
+                    new_words = set(new_item.get("task", "").lower().split())
+                    if not old_words or not new_words:
+                        continue
+                    overlap = len(old_words & new_words) / max(len(old_words), len(new_words))
+                    if overlap > best_score and overlap >= 0.4:
+                        best_score = overlap
+                        best_match = new_item
+
+                if best_match:
+                    best_match["jira_id"] = old["jira_id"]
+                    best_match["jira_url"] = old["jira_url"]
+                    if old.get("status"):
+                        best_match["status"] = old["status"]
+
+            with open(ai_path, "w", encoding="utf-8") as f:
+                _json.dump(new_data, f, indent=2, ensure_ascii=False)
+
+        logger.info("[%s] ✅ Action items regenerated with mapped names (Jira links preserved)", meeting_id)
     except Exception as e:
         logger.warning("[%s] Action items regeneration failed: %s", meeting_id, e)
 

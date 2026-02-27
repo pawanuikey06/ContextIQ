@@ -1,257 +1,105 @@
-# ContextIQ — Meeting Intelligence Platform
-
-> Upload a meeting video → get **speaker-diarized transcription**, **bilingual AI summaries**, **sentiment analysis**, **action items**, **Jira integration**, **RAG chatbot**, **full PDF reports**, and **one-click publishing** — all privacy-first, running locally on your GPU.
-
----
-
-## ✨ Features (36+ Capabilities)
-
-### 🎬 Ingestion & Processing
-| # | Feature | Details |
-|---|---------|---------|
-| 1 | **Video Upload** | `.mp4`, `.mkv`, `.mov` — extracts 16 kHz mono WAV via FFmpeg |
-| 2 | **Upload Deduplication** | SHA-256 hashing prevents reprocessing duplicate files |
-| 3 | **Auto Audio Extraction** | FFmpeg-based, supports all major codecs |
-
-### 🗣️ Transcription & Diarization
-| # | Feature | Details |
-|---|---------|---------|
-| 4 | **Multi-Engine STT** | AssemblyAI (primary), Groq Whisper, local WhisperX — configurable via `STT_MODE` |
-| 5 | **Speaker Diarization** | pyannote.audio 3.1 identifies individual speakers |
-| 6 | **GPU Acceleration** | Auto-detects NVIDIA CUDA GPUs (3–5× faster) |
-| 7 | **Auto Metadata** | Processing timestamps, segment/speaker counts auto-saved |
-
-### 🤖 AI Intelligence (Groq Llama 3.3 70B)
-| # | Feature | Details |
-|---|---------|---------|
-| 8 | **Bilingual Summaries** | Speaker-wise + overall in English & Hindi |
-| 9 | **Action Items** | Tasks with assignee, deadline, priority (🔴🟡🟢) |
-| 10 | **Decisions Tracker** | Who decided what and why |
-| 11 | **Key Takeaways** | Bullet-point highlights from every meeting |
-| 12 | **Auto Meeting Title** | AI-generated descriptive title |
-| 13 | **Follow-Up Email Draft** | Professional email combining summary + action items |
-| 14 | **Sentiment Analysis** | Per-segment mood scoring, emotion labels, highlights |
-| 15 | **Requirements Extraction** | Functional requirements with priority levels |
-| 16 | **Documentation Generation** | Auto-generated meeting objective & next steps |
-
-### 💬 RAG Chatbot
-| # | Feature | Details |
-|---|---------|---------|
-| 17 | **Multi-Meeting Q&A** | Cross-meeting RAG via LangChain + ChromaDB |
-| 18 | **SSE Streaming** | Real-time token-by-token with blinking cursor |
-| 19 | **Source Citations** | Speaker, timestamp, and meeting ID per answer |
-| 20 | **Session Memory** | Conversation history maintained per session |
-
-### 👤 Human-in-the-Loop (HITL)
-| # | Feature | Details |
-|---|---------|---------|
-| 21 | **Speaker Name Mapping** | Map `SPEAKER_00` → real names; persists across views |
-| 22 | **Summary Approval** | Review, edit, and approve before publishing |
-| 23 | **Custom Rewrite** | Provide instructions to regenerate summaries |
-
-### 📄 Publishing & Export
-| # | Feature | Details |
-|---|---------|---------|
-| 24 | **PDF Summary** | Professional layout with Unicode Hindi (NotoSansDevanagari) |
-| 25 | **Full Report PDF** | Combines summary + action items + requirements + docs |
-| 26 | **Email Publishing** | SMTP delivery with PDF attachment |
-| 27 | **Teams Webhook** | Microsoft Teams Adaptive Card delivery |
-
-### 🖥️ Modern Svelte Frontend
-| # | Feature | Details |
-|---|---------|---------|
-| 30 | **Dashboard** | Real-time stats (meetings, speakers, duration) with search filter |
-| 31 | **Meeting Detail** | 7-card feature grid (Chat, Speakers, Timeline, Summary, Action Items, Docs, Requirements, Sentiment) |
-| 32 | **Meeting Search** | Live keyword search across transcripts, titles, speakers |
-| 33 | **AI Chat Page** | Streaming chatbot with session management |
-| 34 | **Action Items Tracker** | Jira-style task board with inline editing + one-click Jira push |
-| 35 | **Toast Notifications** | System-wide feedback (success/error/info) |
-| 36 | **Skeleton Loading** | Shimmer loading states for polished UX |
-
-### 🔗 Jira Integration
-| # | Feature | Details |
-|---|---------|---------|
-| 37 | **Push to Jira** | One-click push of individual or all action items to Jira as tickets |
-| 38 | **Sync from Jira** | Bi-directional sync — fetch status/priority/assignee updates back from Jira |
-| 39 | **Update to Jira** | Edit action items in ContextIQ and push changes back to linked Jira tickets |
+<p align="center">
+  <h1 align="center">🧠 ContextIQ</h1>
+  <p align="center"><strong>Intelligent Meeting Analytics Platform</strong></p>
+  <p align="center">
+    Transform meeting recordings into structured knowledge, actionable insights, and automated workflows — powered by AI.
+  </p>
+</p>
 
 ---
 
-## 🏗️ Architecture
+## 🌟 What is ContextIQ?
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                   PRESENTATION LAYER                          │
-│             Svelte + Vite (SPA, Hash Router)                  │
-│  Home │ Dashboard │ MeetingDetail │ Search │ Chat │ Actions  │
-│          Toast Notifications │ Skeleton Loading UI            │
-└────────────────────────────┬─────────────────────────────────┘
-                             │ REST API (HTTP + SSE)
-┌────────────────────────────▼─────────────────────────────────┐
-│                    API LAYER (FastAPI)                         │
-│  upload │ transcribe │ diarization │ summarize │ publish      │
-│  speaker_map │ insights │ chat │ stats │ subtitles │ jira    │
-└────────────────────────────┬─────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────┐
-│                   SERVICES LAYER                              │
-│  stt_service │ rag_service │ summary_service │ publish_service│
-│  insights_service │ speaker_service │ jira_service            │
-│         storage_service │ video_to_audio                      │
-└────────────────────────────┬─────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────┐
-│                EXTERNAL AI SERVICES                           │
-│  Groq API (Llama 3.3 70B) │ WhisperX (local) │ pyannote     │
-└────────────────────────────┬─────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────┐
-│                 DATA & STORAGE LAYER                          │
-│  storage/ (JSON) │ ChromaDB (vectors) │ data/audio/ (WAV)    │
-│               _file_hashes.json (dedup)                       │
-└──────────────────────────────────────────────────────────────┘
-```
+ContextIQ is a full-stack AI platform that takes raw meeting recordings and automatically produces:
 
-### Directory Structure
+- 📝 **Bilingual Summaries** (English + Hindi) with per-speaker breakdowns
+- ✅ **Action Items** with assignee, priority, deadline, and Jira sync
+- 📋 **Requirements Documents** extracted from discussions
+- 📄 **Meeting Minutes (MoM)** with agenda, attendees, and next steps
+- 😊 **Sentiment Analysis** per speaker segment
+- 📌 **Topic Segmentation** with time ranges
+- 💬 **AI Chatbot** (RAG) for cross-meeting Q&A with citations
+- 🎫 **Jira Integration** — bidirectional ticket sync
+- 📤 **Publishing** — PDF reports, email, Microsoft Teams notifications
 
-```
-ContextIQ/
-├── app/
-│   ├── main.py                       # FastAPI entry, CORS, router registration
-│   ├── api/
-│   │   ├── upload.py                 # POST /upload-video (SHA-256 dedup)
-│   │   ├── transcribe.py            # POST /transcribe/{id}
-│   │   ├── diarization.py           # GET /meeting/{id}, PUT segments
-│   │   ├── summarize.py             # POST /summarize/{id}
-│   │   ├── publish.py               # POST /publish, GET /pdf, GET /full-report
-│   │   ├── speaker_map.py           # POST/GET speaker name mapping
-│   │   ├── chat.py                  # POST /chat/ask/stream (SSE)
-│   │   ├── insights.py              # Action items, auto-title, email, requirements, docs, sentiment
-│   │   ├── stats.py                 # GET /stats (dashboard aggregates)
-│   │   ├── search.py                # GET /search?q= (keyword search)
-│   │   └── jira.py                  # Jira push, sync, update endpoints
-│   ├── services/
-│   │   ├── stt_service.py           # Multi-engine STT (AssemblyAI, Groq, WhisperX)
-│   │   ├── rag_service.py           # LangChain + ChromaDB + Groq RAG
-│   │   ├── summary_service.py       # Groq Llama 3.3 70B summarization
-│   │   ├── insights_service.py      # Action items, sentiment, requirements, docs
-│   │   ├── publish_service.py       # PDF (fpdf2) + SMTP + Teams + Full Report
-│   │   ├── jira_service.py          # Jira REST API client (create, sync, update)
-│   │   ├── speaker_service.py       # Speaker segment grouping
-│   │   ├── storage_service.py       # JSON persistence
-│   │   └── video_to_audio.py        # FFmpeg extraction
-│   ├── schemas/                      # Pydantic v2 models
-│   └── fonts/                        # NotoSans + NotoSansDevanagari TTF
-├── frontend/                          # Svelte + Vite SPA
-│   └── src/
-│       ├── App.svelte               # Router + global Toast
-│       ├── pages/
-│       │   ├── Home.svelte          # Landing page (6 feature cards)
-│       │   ├── Dashboard.svelte     # Stats + meetings table + search
-│       │   ├── MeetingDetail.svelte # 7-card feature grid + all tab views
-│       │   ├── Chat.svelte          # RAG chatbot with SSE streaming
-│       │   ├── ActionItems.svelte   # Jira-style task tracker
-│       │   └── Search.svelte        # Live keyword search
-│       ├── components/
-│       │   ├── Header.svelte        # Top nav bar
-│       │   ├── Toast.svelte         # Toast notification component
-│       │   ├── Skeleton.svelte      # Shimmer loading component
-│       │   └── Logo.svelte          # ContextIQ logo
-│       └── lib/
-│           ├── api.js               # API URL definitions + fetch helpers
-│           ├── stores.js            # Svelte stores (meeting, summary, speaker map)
-│           ├── toast.js             # Toast notification store
-│           └── utils.js             # formatTime, colors, shortId
-├── storage/                           # Runtime data (transcripts, summaries, etc.)
-│   ├── {meeting_id}/                # Per-meeting JSON files
-│   └── chroma_db/                   # ChromaDB vector store
-├── data/audio/                        # Extracted WAV files
-├── requirements.txt
-└── .env                               # Configuration
+All powered by **Llama 3.3 70B** (via Groq), **WhisperX** for transcription, and **ChromaDB** for retrieval.
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph TB
+    subgraph Client["🖥️ Frontend — Svelte + Vite"]
+        Home["Home Page"]
+        Dash["Dashboard<br/>Upload + Stats"]
+        MD["Meeting Detail<br/>Transcript + Analytics"]
+        AI["Action Items<br/>Tasks + Jira + Email"]
+        Chat["AI Chat<br/>RAG Q&A"]
+        Search["Search"]
+    end
+
+    subgraph Server["⚙️ Backend — FastAPI"]
+        direction TB
+        subgraph API["API Layer — 12 Routers, 30+ Endpoints"]
+            Upload["Upload & Transcribe"]
+            Insights["AI Insights (10 endpoints)"]
+            ChatAPI["RAG Chat (SSE Streaming)"]
+            JiraAPI["Jira Sync (Bidirectional)"]
+            Publish["Publish (PDF/Email/Teams)"]
+        end
+        subgraph Services["Service Layer — 9 Services"]
+            STT["stt_service.py"]
+            Summary["summary_service.py"]
+            InsightsSvc["insights_service.py"]
+            RAG["rag_service.py"]
+            PubSvc["publish_service.py"]
+            JiraSvc["jira_service.py"]
+        end
+    end
+
+    subgraph External["☁️ External"]
+        Groq["Groq API<br/>Llama 3.3 70B"]
+        Jira["Jira Cloud"]
+        Teams["MS Teams"]
+        SMTP["SMTP Email"]
+    end
+
+    subgraph Storage["💾 Storage"]
+        FS["JSON Files<br/>storage/{id}/*.json"]
+        Chroma["ChromaDB<br/>Vector Store"]
+    end
+
+    Client -->|REST API| API
+    API --> Services
+    Services --> External
+    Services --> Storage
 ```
 
 ---
 
-## 📡 API Reference (32 Endpoints)
+## 📊 Data Flow — End-to-End Pipeline
 
-### Upload & Transcription
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/upload-video` | Upload video, extract audio (SHA-256 dedup) |
-| `POST` | `/transcribe/{id}` | Transcribe + diarize + auto-metadata |
-| `GET` | `/meeting/{id}` | Retrieve saved transcript |
-| `PUT` | `/meeting/{id}/segments/{index}` | Edit a transcript segment |
-| `GET` | `/meeting/{id}/metadata` | Get meeting metadata |
-| `PATCH` | `/meeting/{id}/metadata` | Update meeting metadata |
-
-### AI Intelligence
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/summarize/{id}` | Generate bilingual summaries |
-| `POST` | `/meeting/{id}/action-items` | Extract action items & decisions |
-| `POST` | `/meeting/{id}/auto-title` | Generate AI meeting title |
-| `POST` | `/meeting/{id}/followup-email` | Draft follow-up email |
-| `POST` | `/meeting/{id}/requirements` | Extract functional requirements |
-| `POST` | `/meeting/{id}/documentation` | Generate meeting documentation |
-| `POST` | `/meeting/{id}/sentiment` | Sentiment analysis per segment |
-
-### RAG Chat
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/chat/ask/stream` | Ask question (SSE streaming) |
-| `POST` | `/chat/index/{id}` | Index meeting for RAG |
-| `GET` | `/chat/meetings` | List indexed meetings |
-| `POST` | `/chat/clear/{session_id}` | Clear chat session |
-
-
-
-### Publishing
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/publish/{id}` | Generate PDF + send Email/Teams |
-| `GET` | `/publish/{id}/pdf` | Download summary PDF |
-| `GET` | `/publish/{id}/full-report` | Download comprehensive report PDF |
-| `POST` | `/meeting/{id}/speaker-map` | Save speaker names |
-| `GET` | `/meeting/{id}/speaker-map` | Get speaker names |
-
-### Jira Integration
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/jira/status` | Check if Jira is configured |
-| `POST` | `/meeting/{id}/jira/push` | Push action items to Jira |
-| `POST` | `/meeting/{id}/jira/sync` | Sync statuses back from Jira |
-| `PUT` | `/meeting/{id}/jira/update` | Update a linked Jira ticket |
-
-### System
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/` | Service info |
-| `GET` | `/health` | GPU, storage, ChromaDB status |
-| `GET` | `/stats` | Dashboard aggregate statistics |
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Svelte 5 + Vite (SPA) |
-| **Backend** | FastAPI + Uvicorn |
-| **Styling** | TailwindCSS |
-| **Icons** | Lucide Svelte |
-| **Routing** | svelte-spa-router (hash-based) |
-| **Transcription** | AssemblyAI (primary) / Groq Whisper / WhisperX (local) |
-| **Diarization** | pyannote.audio 3.1 |
-| **LLM** | Llama 3.3 70B via Groq (~500 tok/sec) |
-| **RAG** | LangChain + ChromaDB |
-| **Embeddings** | HuggingFace `all-MiniLM-L6-v2` (local) |
-| **PDF** | fpdf2 (Unicode Hindi support) |
-| **Email** | SMTP (smtplib) |
-| **Teams** | Microsoft Incoming Webhook |
-| **Jira** | Atlassian REST API v3 |
-| **Audio** | FFmpeg |
-| **ML** | PyTorch (CUDA 12.8) |
-| **Streaming** | Server-Sent Events (SSE) |
+```mermaid
+flowchart LR
+    A["📹 Upload<br/>Video"] --> B["🔊 FFmpeg<br/>Extract Audio"]
+    B --> C["🗣️ WhisperX<br/>Transcribe + Diarize"]
+    C --> D["💾 Save<br/>transcript.json"]
+    D --> E["🏷️ Auto Title<br/>Groq LLM"]
+    D --> F["🔍 Index RAG<br/>ChromaDB"]
+    D --> G["👤 Map Names<br/>HITL"]
+    G --> H["🔄 Background<br/>Regenerate All"]
+    H --> S1["Summary"]
+    H --> S2["Action Items"]
+    H --> S3["Requirements"]
+    H --> S4["Documentation"]
+    H --> S5["Sentiment"]
+    H --> S6["Topics"]
+    H --> S7["Email Draft"]
+    S2 --> J["🎫 Jira Sync"]
+    S1 --> P["📤 PDF + Email + Teams"]
+    F --> C2["💬 AI Chat"]
+```
 
 ---
 
@@ -259,113 +107,357 @@ ContextIQ/
 
 ### Prerequisites
 
-| Tool | Why |
-|------|-----|
-| **Python 3.10+** | Backend runtime |
-| **Node.js 18+** | Frontend build |
-| **FFmpeg** | Video → audio extraction |
-| **NVIDIA GPU + CUDA** *(optional)* | 3–5× faster transcription |
-| **HuggingFace account** | pyannote diarization models |
-| **Groq API key** | LLM inference ([get free key](https://console.groq.com/keys)) |
-| **AssemblyAI API key** *(optional)* | Primary STT ([get key](https://www.assemblyai.com/)) |
-| **Jira account** *(optional)* | Action item management ([Atlassian](https://www.atlassian.com/)) |
+- **Python 3.10+**
+- **Node.js 18+** and npm
+- **FFmpeg** installed and in PATH
+- **Groq API Key** (free at [console.groq.com](https://console.groq.com))
 
-### Backend Setup
+### 1. Clone & Setup Backend
 
 ```bash
-git clone https://github.com/pawanuikey06/ContextIQ.git
+git clone https://github.com/your-username/ContextIQ.git
 cd ContextIQ
+
+# Create virtual environment
 python -m venv .venv
 .venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux/macOS
+
+# Install dependencies
 pip install -r requirements.txt
-pip install --force-reinstall torch torchaudio --index-url https://download.pytorch.org/whl/cu128
 ```
 
-### Frontend Setup
+### 2. Configure Environment
+
+Create a `.env` file in the project root:
+
+```env
+# Required
+GROQ_API_KEY=gsk_your_groq_api_key
+FFMPEG_PATH=ffmpeg
+
+# Optional — Jira Integration
+JIRA_BASE_URL=https://yourorg.atlassian.net
+JIRA_EMAIL=you@company.com
+JIRA_API_TOKEN=your_jira_api_token
+JIRA_PROJECT_KEY=PROJ
+
+# Optional — Email
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@gmail.com
+SMTP_PASSWORD=your_app_password
+
+# Optional — Teams
+TEAMS_WEBHOOK_URL=https://outlook.office.com/webhook/...
+
+# Optional — AssemblyAI (alternative STT)
+ASSEMBLYAI_API_KEY=your_assemblyai_key
+```
+
+### 3. Start Backend
+
+```bash
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+### 4. Start Frontend
 
 ```bash
 cd frontend
 npm install
-```
-
-### Configure `.env`
-
-```env
-FFMPEG_PATH=C:/path/to/ffmpeg.exe
-HF_TOKEN=hf_your_huggingface_token
-GROQ_API_KEY=gsk_your_groq_api_key
-
-# Speech-to-Text (assemblyai | groq | local | auto)
-STT_MODE=assemblyai
-ASSEMBLYAI_API_KEY=your_assemblyai_key
-
-# Optional — Publishing
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your@gmail.com
-SMTP_PASSWORD=your-app-password
-TEAMS_WEBHOOK_URL=https://your-org.webhook.office.com/...
-
-# Optional — Jira Integration
-JIRA_BASE_URL=https://your-domain.atlassian.net
-JIRA_EMAIL=your-email@domain.com
-JIRA_API_TOKEN=your_jira_api_token
-JIRA_PROJECT_KEY=PROJ
-```
-
-### Run
-
-```bash
-# Terminal 1 — Backend
-python -m uvicorn app.main:app --reload --port 8000
-
-# Terminal 2 — Frontend
-cd frontend
 npm run dev
 ```
 
-| Service | URL |
-|---------|-----|
-| Frontend UI | http://localhost:5173 |
-| Backend API | http://localhost:8000 |
-| Swagger Docs | http://localhost:8000/docs |
+Open **http://localhost:5173** in your browser.
 
 ---
 
-## 🔄 Processing Pipeline
+## 🧩 Feature Breakdown
+
+### 🎙️ Multi-Engine Transcription
+
+ContextIQ supports three transcription engines:
+
+| Engine | Type | Speed | Best For |
+|---|---|---|---|
+| **WhisperX** | Local (GPU) | ~2x real-time | Accuracy + word-level timestamps |
+| **AssemblyAI** | Cloud API | ~3x real-time | Built-in diarization |
+| **Groq Whisper** | Cloud (LPU) | ~5x real-time | Maximum speed |
+
+All engines produce a standardized output with speaker labels, timestamps, and text.
+
+### 👤 Speaker Diarization + HITL Mapping
+
+Automatic speaker identification via **pyannote.audio 3.x**, with a Human-in-the-Loop layer:
 
 ```mermaid
 flowchart LR
-    A["📹 Upload Video"] --> B["🎵 Extract Audio<br/>(FFmpeg)"]
-    B --> C["🗣️ Transcribe + Diarize<br/>(WhisperX + pyannote)"]
-    C --> D["💾 Save Transcript<br/>(JSON + metadata)"]
-    D --> E["🤖 AI Summary<br/>(Groq Llama 3.3 70B)"]
-    D --> F["💬 RAG Chat<br/>(ChromaDB + Groq SSE)"]
-    D --> G["🎯 Action Items<br/>(Groq extraction)"]
-    D --> H["📊 Sentiment Analysis<br/>(Groq per-segment)"]
-    E --> I["✅ Human Review<br/>(HITL approval)"]
-    G --> J["✉️ Follow-Up Email<br/>(AI draft)"]
-    I --> K["📄 Publish<br/>(PDF + Email + Teams)"]
+    A["Audio"] --> B["pyannote.audio<br/>Speaker Detection"]
+    B --> C["SPEAKER_00<br/>SPEAKER_01<br/>SPEAKER_02"]
+    C --> D["👤 HITL Mapping<br/>User assigns names"]
+    D --> E["Babu JI<br/>Purnima<br/>Varun"]
+    E --> F["🔄 Auto-Regenerate<br/>All 8 AI insights"]
+```
+
+When names are mapped, **all insights are automatically regenerated in the background** with real speaker names — summary, action items, requirements, sentiment, topics, documentation, follow-up email, and RAG index.
+
+### 📝 Bilingual Summary Generation
+
+LLM-generated summaries in **English + Hindi**:
+- **Per-speaker summaries** — what each person contributed
+- **Overall summary** — key points, decisions, action items
+- **Hindi summary** — professional Hindi, not word-by-word translation
+
+### ✅ Action Items & Decision Extraction
+
+Structured extraction with rich fields:
+
+```json
+{
+  "task": "Set up meeting with HR head for HRMS automation sign-off",
+  "assigned_to": "Babu JI",
+  "priority": "high",
+  "category": "communication",
+  "deadline": "Tomorrow",
+  "context": "The HRMS integration requires HR head's approval...",
+  "success_criteria": "Business case presented and approved",
+  "dependencies": ["HR head availability"],
+  "mentioned_by": "Babu JI"
+}
+```
+
+### 💬 RAG AI Chatbot
+
+Cross-meeting Q&A powered by **ChromaDB + LangChain + Llama 3.3 70B**:
+
+```mermaid
+flowchart LR
+    Q["User Question"] --> R["ChromaDB<br/>Diverse Retrieval"]
+    R --> C["Context from<br/>ALL meetings"]
+    C --> L["Llama 3.3 70B<br/>Generate Answer"]
+    L --> S["SSE Stream<br/>to Frontend"]
+    S --> A["Answer + Citations<br/>with timestamps"]
+```
+
+**Key feature:** Diverse retrieval algorithm round-robins across meetings so every meeting is represented in the context.
+
+### 🎫 Jira Bidirectional Sync
+
+```mermaid
+sequenceDiagram
+    participant CIQ as ContextIQ
+    participant Jira as Jira Cloud
+
+    Note over CIQ,Jira: Push: ContextIQ → Jira
+    CIQ->>Jira: Create ticket (summary, priority, description, due date, labels)
+    Jira-->>CIQ: Returns SCRUM-12
+
+    Note over CIQ,Jira: Sync: Jira → ContextIQ
+    CIQ->>Jira: GET status, priority, assignee
+    Jira-->>CIQ: Update local data
+
+    Note over CIQ,Jira: Update: ContextIQ → Jira
+    CIQ->>Jira: PUT fields + POST transitions
+```
+
+**Field mapping:** task → summary, priority → priority, category → issuetype (Story/Bug/Task), deadline → duedate, labels: `contextiq`, `category-{type}`
+
+### 📤 Publishing Pipeline
+
+| Channel | Format |
+|---|---|
+| **PDF Download** | Unicode PDF with EN + HI (NotoSans + NotoSansDevanagari) |
+| **Email** | PDF attached, sent via SMTP/TLS |
+| **MS Teams** | Rich Adaptive Card v1.4 with summary, action items, decisions, speakers |
+| **Follow-up Email** | AI-generated draft with preview + edit before sending |
+
+---
+
+## 🗂️ Project Structure
+
+```
+ContextIQ/
+├── app/
+│   ├── main.py                     # FastAPI entry point
+│   ├── api/                        # 12 API routers
+│   │   ├── upload.py               # POST /upload-video
+│   │   ├── transcribe.py           # POST /transcribe/{id}
+│   │   ├── summarize.py            # POST /summarize/{id}
+│   │   ├── insights.py             # Action items, requirements, docs, sentiment, topics
+│   │   ├── chat.py                 # RAG chatbot (SSE streaming)
+│   │   ├── jira.py                 # Jira push, sync, update
+│   │   ├── publish.py              # PDF + email + Teams
+│   │   ├── speaker_map.py          # HITL speaker name mapping
+│   │   ├── search.py               # Keyword search
+│   │   ├── stats.py                # Dashboard statistics
+│   │   └── diarization.py          # Meeting detail data
+│   └── services/                   # 9 service classes
+│       ├── stt_service.py          # Multi-engine transcription
+│       ├── video_to_audio.py       # FFmpeg audio extraction
+│       ├── speaker_service.py      # Speaker grouping
+│       ├── summary_service.py      # Bilingual summaries
+│       ├── insights_service.py     # All AI insight extraction
+│       ├── rag_service.py          # ChromaDB + LangChain RAG
+│       ├── publish_service.py      # PDF + Email + Teams
+│       ├── jira_service.py         # Jira REST API client
+│       └── storage_service.py      # File I/O
+├── frontend/
+│   └── src/
+│       ├── pages/                  # 6 page components
+│       │   ├── Home.svelte         # Landing page
+│       │   ├── Dashboard.svelte    # Upload + meeting list
+│       │   ├── MeetingDetail.svelte # Transcript + analytics
+│       │   ├── ActionItems.svelte  # Tasks + Jira + email
+│       │   ├── Chat.svelte         # RAG chatbot
+│       │   └── Search.svelte       # Keyword search
+│       ├── components/             # Reusable UI components
+│       └── lib/                    # API bindings + utilities
+├── storage/                        # Per-meeting JSON data
+│   └── {meeting_id}/
+│       ├── transcript.json
+│       ├── metadata.json
+│       ├── speaker_map.json
+│       ├── summary.json
+│       ├── action_items.json
+│       ├── requirements.json
+│       ├── documentation.json
+│       ├── sentiment.json
+│       ├── topics.json
+│       └── followup_email.json
+├── docs/
+│   ├── architecture.md             # 14 Mermaid diagrams
+│   └── PROJECT_REPORT.md           # Full academic report
+├── .env                            # Environment configuration
+└── requirements.txt                # Python dependencies
 ```
 
 ---
 
-## 🏆 What Makes ContextIQ Unique
+## 🔌 API Reference
 
-| Feature | Otter.ai | Fireflies | Gong | ContextIQ |
-|---------|----------|-----------|------|-----------|
-| **Hindi summaries** | ❌ | ❌ | ❌ | ✅ |
-| **Multi-engine STT** | Single | Single | Single | ✅ AssemblyAI + Groq + WhisperX |
-| **Sentiment analysis** | ❌ | ❌ | Basic | ✅ Per-segment |
-| **RAG with citations** | ❌ | Basic | ❌ | ✅ Speaker+timestamp |
-| **SSE streaming chat** | ❌ | ❌ | ❌ | ✅ |
-| **Jira integration** | ❌ | ❌ | Basic | ✅ Bi-directional sync |
-| **HITL approval** | ❌ | ❌ | ❌ | ✅ |
-| **Full report PDF** | ❌ | ❌ | ❌ | ✅ |
-| **Self-hosted / free** | $20/mo | $19/mo | $100+/mo | ✅ Free |
+### Ingestion
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/upload-video` | Upload video file, returns `meeting_id` |
+| `POST` | `/transcribe/{id}` | Transcribe + diarize meeting |
+
+### AI Insights
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/summarize/{id}` | Generate bilingual summary |
+| `POST` | `/meeting/{id}/action-items` | Extract action items + decisions |
+| `POST` | `/meeting/{id}/requirements` | Extract requirements |
+| `POST` | `/meeting/{id}/documentation` | Generate meeting MoM |
+| `POST` | `/meeting/{id}/sentiment` | Analyze sentiment per segment |
+| `POST` | `/meeting/{id}/topics` | Identify topic segments |
+| `POST` | `/meeting/{id}/followup-email` | Generate follow-up email draft |
+| `POST` | `/meeting/{id}/title` | Auto-generate meeting title |
+| `POST` | `/meeting/{id}/speaker-report` | Generate speaker report cards |
+| `POST` | `/meeting/{id}/culture-score` | Calculate meeting culture score |
+
+### RAG Chat
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/chat/ask/stream` | Stream answer via SSE |
+| `POST` | `/chat/index/{id}` | Index meeting into ChromaDB |
+| `GET` | `/chat/meetings` | List indexed meetings with titles |
+| `POST` | `/chat/clear/{session}` | Clear chat history |
+
+### Jira Integration
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/meeting/{id}/jira/push` | Push action items to Jira |
+| `POST` | `/meeting/{id}/jira/sync` | Sync statuses from Jira |
+| `PUT` | `/meeting/{id}/jira/update` | Update Jira ticket from ContextIQ |
+| `GET` | `/jira/status` | Check Jira configuration |
+
+### Publishing
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/publish/{id}` | Generate PDF + send email + Teams |
+| `POST` | `/meeting/{id}/followup-email/send` | Send follow-up email via SMTP |
+| `GET` | `/meeting/{id}/report` | Download full PDF report |
+
+### HITL & Data
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/meeting/{id}/speaker-map` | Save speaker names (triggers regen) |
+| `GET` | `/meeting/{id}/speaker-map` | Get speaker name mappings |
+| `GET` | `/meetings` | List all meetings |
+| `GET` | `/meeting/{id}` | Get meeting detail |
+| `GET` | `/stats` | Dashboard statistics |
+| `GET` | `/search?q=keyword` | Search across meetings |
 
 ---
 
-## 📝 License
+## 🔧 Environment Variables
 
-MIT
+| Variable | Required | Description |
+|---|---|---|
+| `GROQ_API_KEY` | ✅ Yes | Groq API key for Llama 3.3 70B |
+| `FFMPEG_PATH` | ✅ Yes | Path to FFmpeg binary |
+| `JIRA_BASE_URL` | ❌ No | Jira instance URL |
+| `JIRA_EMAIL` | ❌ No | Jira account email |
+| `JIRA_API_TOKEN` | ❌ No | Jira API token |
+| `JIRA_PROJECT_KEY` | ❌ No | Jira project key (e.g., PROJ) |
+| `SMTP_HOST` | ❌ No | SMTP server host |
+| `SMTP_PORT` | ❌ No | SMTP server port |
+| `SMTP_USER` | ❌ No | SMTP username |
+| `SMTP_PASSWORD` | ❌ No | SMTP password / app password |
+| `TEAMS_WEBHOOK_URL` | ❌ No | MS Teams incoming webhook URL |
+| `ASSEMBLYAI_API_KEY` | ❌ No | AssemblyAI API key |
+
+---
+
+## 🛠️ Tech Stack
+
+```mermaid
+mindmap
+  root((ContextIQ))
+    Frontend
+      Svelte 4
+      Vite 5
+      TailwindCSS
+      lucide-svelte
+      svelte-spa-router
+    Backend
+      FastAPI
+      Uvicorn
+      Python 3.10
+      Pydantic v2
+    AI and ML
+      WhisperX
+      pyannote.audio
+      Groq Llama 3.3 70B
+      LangChain
+      ChromaDB
+      Sentence Transformers
+    Integrations
+      Jira REST API v3
+      MS Teams Webhooks
+      SMTP Email
+      fpdf2 PDF
+    Infrastructure
+      FFmpeg
+      File System JSON
+      ChromaDB SQLite
+```
+
+---
+
+## 📜 License
+
+This project is developed for academic and demonstration purposes.
+
+---
+
+<p align="center">
+  Built with ❤️ using AI — <strong>ContextIQ Meeting Intelligence</strong>
+</p>

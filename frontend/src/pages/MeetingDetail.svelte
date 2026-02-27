@@ -21,6 +21,8 @@
         Tag,
         Layers,
         UserCheck,
+        Share2,
+        ExternalLink,
     } from "lucide-svelte";
     import { toasts } from "../lib/toast.js";
     import { api, get, post } from "../lib/api.js";
@@ -98,6 +100,12 @@
     // Speaker Report Cards
     let speakerReportData = null;
     let loadingSpeakerReport = false;
+
+    // Publish / Integrations
+    let pushingNotion = false;
+    let pushingConfluence = false;
+    let notionResult = null;
+    let confluenceResult = null;
 
     const tabs = [
         {
@@ -198,6 +206,15 @@
             bg: "bg-teal-50",
             border: "border-teal-100",
             desc: "Per-speaker report cards with role classification and comprehensive metrics.",
+        },
+        {
+            id: "publish",
+            label: "Publish",
+            icon: Share2,
+            color: "text-pink-600",
+            bg: "bg-pink-50",
+            border: "border-pink-100",
+            desc: "Push meeting data to Notion or Confluence.",
         },
     ];
 
@@ -2803,13 +2820,19 @@
         {#if activeTab === "speakerReport"}
             <div class="max-w-5xl space-y-6">
                 <div class="flex items-center justify-between">
-                    <p class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]">Speaker Report Cards</p>
+                    <p
+                        class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]"
+                    >
+                        Speaker Report Cards
+                    </p>
                     <button
                         class="btn-secondary text-sm"
                         on:click={async () => {
                             loadingSpeakerReport = true;
                             try {
-                                speakerReportData = await get(api.speakerReport(meetingId));
+                                speakerReportData = await get(
+                                    api.speakerReport(meetingId),
+                                );
                             } catch (e) {
                                 toasts.error("Failed to load speaker report");
                             } finally {
@@ -2822,48 +2845,120 @@
                             <Loader2 size={14} class="animate-spin" /> Loading…
                         {:else}
                             <UserCheck size={14} />
-                            {speakerReportData ? "Refresh" : "Generate Report Cards"}
+                            {speakerReportData
+                                ? "Refresh"
+                                : "Generate Report Cards"}
                         {/if}
                     </button>
                 </div>
 
                 {#if !speakerReportData}
-                    <div class="bg-white border border-surface-200 rounded-2xl p-10 text-center">
-                        <div class="w-12 h-12 mx-auto rounded-xl bg-teal-100 flex items-center justify-center mb-4">
+                    <div
+                        class="bg-white border border-surface-200 rounded-2xl p-10 text-center"
+                    >
+                        <div
+                            class="w-12 h-12 mx-auto rounded-xl bg-teal-100 flex items-center justify-center mb-4"
+                        >
                             <UserCheck size={22} class="text-teal-600" />
                         </div>
-                        <h3 class="text-base font-semibold text-txt-primary mb-1">Speaker Report Cards</h3>
-                        <p class="text-sm text-txt-muted max-w-sm mx-auto">Click "Generate Report Cards" to see comprehensive per-speaker scorecards with role classification, sentiment, and more.</p>
+                        <h3
+                            class="text-base font-semibold text-txt-primary mb-1"
+                        >
+                            Speaker Report Cards
+                        </h3>
+                        <p class="text-sm text-txt-muted max-w-sm mx-auto">
+                            Click "Generate Report Cards" to see comprehensive
+                            per-speaker scorecards with role classification,
+                            sentiment, and more.
+                        </p>
                     </div>
                 {:else}
                     <!-- Card Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    <div
+                        class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+                    >
                         {#each speakerReportData.speakers as s, i}
                             {@const roleColors = {
-                                'Decision Maker': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: '🎯' },
-                                'Presenter': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: '🎤' },
-                                'Challenger': { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', icon: '❓' },
-                                'Doer': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: '✅' },
-                                'Observer': { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', icon: '👂' },
-                                'Contributor': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', icon: '💬' },
+                                "Decision Maker": {
+                                    bg: "bg-amber-50",
+                                    text: "text-amber-700",
+                                    border: "border-amber-200",
+                                    icon: "🎯",
+                                },
+                                Presenter: {
+                                    bg: "bg-blue-50",
+                                    text: "text-blue-700",
+                                    border: "border-blue-200",
+                                    icon: "🎤",
+                                },
+                                Challenger: {
+                                    bg: "bg-purple-50",
+                                    text: "text-purple-700",
+                                    border: "border-purple-200",
+                                    icon: "❓",
+                                },
+                                Doer: {
+                                    bg: "bg-emerald-50",
+                                    text: "text-emerald-700",
+                                    border: "border-emerald-200",
+                                    icon: "✅",
+                                },
+                                Observer: {
+                                    bg: "bg-slate-50",
+                                    text: "text-slate-600",
+                                    border: "border-slate-200",
+                                    icon: "👂",
+                                },
+                                Contributor: {
+                                    bg: "bg-cyan-50",
+                                    text: "text-cyan-700",
+                                    border: "border-cyan-200",
+                                    icon: "💬",
+                                },
                             }}
-                            {@const rc = roleColors[s.role] || roleColors['Contributor']}
-                            {@const sentColor = s.sentiment.dominant === 'positive' ? '#10b981' : s.sentiment.dominant === 'negative' ? '#ef4444' : '#64748b'}
-                            {@const sentEmoji = s.sentiment.dominant === 'positive' ? '😊' : s.sentiment.dominant === 'negative' ? '😟' : '😐'}
-                            <div class="bg-white border border-surface-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                            {@const rc =
+                                roleColors[s.role] || roleColors["Contributor"]}
+                            {@const sentColor =
+                                s.sentiment.dominant === "positive"
+                                    ? "#10b981"
+                                    : s.sentiment.dominant === "negative"
+                                      ? "#ef4444"
+                                      : "#64748b"}
+                            {@const sentEmoji =
+                                s.sentiment.dominant === "positive"
+                                    ? "😊"
+                                    : s.sentiment.dominant === "negative"
+                                      ? "😟"
+                                      : "😐"}
+                            <div
+                                class="bg-white border border-surface-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                            >
                                 <!-- Header -->
-                                <div class="p-4 pb-3 border-b border-surface-100">
+                                <div
+                                    class="p-4 pb-3 border-b border-surface-100"
+                                >
                                     <div class="flex items-center gap-3">
                                         <div
                                             class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold"
-                                            style="background-color: {getColor(s.speaker_id)}"
+                                            style="background-color: {getColor(
+                                                s.speaker_id,
+                                            )}"
                                         >
-                                            {s.display_name.charAt(0).toUpperCase()}
+                                            {s.display_name
+                                                .charAt(0)
+                                                .toUpperCase()}
                                         </div>
                                         <div class="flex-1 min-w-0">
-                                            <h4 class="text-sm font-bold text-txt-primary truncate">{s.display_name}</h4>
-                                            <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border {rc.bg} {rc.text} {rc.border}">
-                                                {rc.icon} {s.role}
+                                            <h4
+                                                class="text-sm font-bold text-txt-primary truncate"
+                                            >
+                                                {s.display_name}
+                                            </h4>
+                                            <span
+                                                class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border {rc.bg} {rc.text} {rc.border}"
+                                            >
+                                                {rc.icon}
+                                                {s.role}
                                             </span>
                                         </div>
                                     </div>
@@ -2873,44 +2968,107 @@
                                 <div class="p-4 space-y-3">
                                     <!-- Talk Time -->
                                     <div>
-                                        <div class="flex justify-between text-[11px] mb-1">
-                                            <span class="text-txt-faint font-medium">🎤 Talk Time</span>
-                                            <span class="font-bold text-txt-primary">{s.talk_time_percent}%</span>
+                                        <div
+                                            class="flex justify-between text-[11px] mb-1"
+                                        >
+                                            <span
+                                                class="text-txt-faint font-medium"
+                                                >🎤 Talk Time</span
+                                            >
+                                            <span
+                                                class="font-bold text-txt-primary"
+                                                >{s.talk_time_percent}%</span
+                                            >
                                         </div>
-                                        <div class="w-full bg-surface-100 rounded-full h-2">
+                                        <div
+                                            class="w-full bg-surface-100 rounded-full h-2"
+                                        >
                                             <div
                                                 class="h-full rounded-full transition-all duration-500"
-                                                style="width: {s.talk_time_percent}%; background-color: {getColor(s.speaker_id)}"
+                                                style="width: {s.talk_time_percent}%; background-color: {getColor(
+                                                    s.speaker_id,
+                                                )}"
                                             ></div>
                                         </div>
-                                        <span class="text-[9px] text-txt-faint">{Math.floor(s.talk_time_seconds / 60)}m {Math.round(s.talk_time_seconds % 60)}s · {s.words_per_minute} WPM</span>
+                                        <span class="text-[9px] text-txt-faint"
+                                            >{Math.floor(
+                                                s.talk_time_seconds / 60,
+                                            )}m {Math.round(
+                                                s.talk_time_seconds % 60,
+                                            )}s · {s.words_per_minute} WPM</span
+                                        >
                                     </div>
 
                                     <!-- Key Metrics Row -->
                                     <div class="grid grid-cols-3 gap-2">
-                                        <div class="bg-surface-50 rounded-lg p-2 text-center">
-                                            <span class="text-lg font-extrabold text-blue-600">{s.word_count}</span>
-                                            <p class="text-[9px] text-txt-faint uppercase">Words</p>
+                                        <div
+                                            class="bg-surface-50 rounded-lg p-2 text-center"
+                                        >
+                                            <span
+                                                class="text-lg font-extrabold text-blue-600"
+                                                >{s.word_count}</span
+                                            >
+                                            <p
+                                                class="text-[9px] text-txt-faint uppercase"
+                                            >
+                                                Words
+                                            </p>
                                         </div>
-                                        <div class="bg-surface-50 rounded-lg p-2 text-center">
-                                            <span class="text-lg font-extrabold text-purple-600">{s.questions_asked}</span>
-                                            <p class="text-[9px] text-txt-faint uppercase">Questions</p>
+                                        <div
+                                            class="bg-surface-50 rounded-lg p-2 text-center"
+                                        >
+                                            <span
+                                                class="text-lg font-extrabold text-purple-600"
+                                                >{s.questions_asked}</span
+                                            >
+                                            <p
+                                                class="text-[9px] text-txt-faint uppercase"
+                                            >
+                                                Questions
+                                            </p>
                                         </div>
-                                        <div class="bg-surface-50 rounded-lg p-2 text-center">
-                                            <span class="text-lg font-extrabold text-amber-600">{s.interruptions}</span>
-                                            <p class="text-[9px] text-txt-faint uppercase">Interrupts</p>
+                                        <div
+                                            class="bg-surface-50 rounded-lg p-2 text-center"
+                                        >
+                                            <span
+                                                class="text-lg font-extrabold text-amber-600"
+                                                >{s.interruptions}</span
+                                            >
+                                            <p
+                                                class="text-[9px] text-txt-faint uppercase"
+                                            >
+                                                Interrupts
+                                            </p>
                                         </div>
                                     </div>
 
                                     <!-- Action Items & Decisions -->
                                     <div class="grid grid-cols-2 gap-2">
-                                        <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100">
-                                            <span class="text-[10px] text-emerald-700 font-semibold">📋 Action Items</span>
-                                            <p class="text-lg font-extrabold text-emerald-600">{s.action_items_assigned}</p>
+                                        <div
+                                            class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100"
+                                        >
+                                            <span
+                                                class="text-[10px] text-emerald-700 font-semibold"
+                                                >📋 Action Items</span
+                                            >
+                                            <p
+                                                class="text-lg font-extrabold text-emerald-600"
+                                            >
+                                                {s.action_items_assigned}
+                                            </p>
                                         </div>
-                                        <div class="bg-amber-50/50 rounded-lg p-2 border border-amber-100">
-                                            <span class="text-[10px] text-amber-700 font-semibold">⚡ Decisions</span>
-                                            <p class="text-lg font-extrabold text-amber-600">{s.decisions_attributed}</p>
+                                        <div
+                                            class="bg-amber-50/50 rounded-lg p-2 border border-amber-100"
+                                        >
+                                            <span
+                                                class="text-[10px] text-amber-700 font-semibold"
+                                                >⚡ Decisions</span
+                                            >
+                                            <p
+                                                class="text-lg font-extrabold text-amber-600"
+                                            >
+                                                {s.decisions_attributed}
+                                            </p>
                                         </div>
                                     </div>
 
@@ -2918,12 +3076,53 @@
                                     <div class="flex items-center gap-2">
                                         <span class="text-sm">{sentEmoji}</span>
                                         <div class="flex-1">
-                                            <span class="text-[10px] font-semibold capitalize" style="color: {sentColor}">{s.sentiment.dominant}</span>
-                                            <div class="flex gap-0.5 mt-1 h-1.5 rounded-full overflow-hidden bg-surface-100">
+                                            <span
+                                                class="text-[10px] font-semibold capitalize"
+                                                style="color: {sentColor}"
+                                                >{s.sentiment.dominant}</span
+                                            >
+                                            <div
+                                                class="flex gap-0.5 mt-1 h-1.5 rounded-full overflow-hidden bg-surface-100"
+                                            >
                                                 {#if s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral > 0}
-                                                    <div class="bg-emerald-400 h-full" style="width: {(s.sentiment.positive / (s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral)) * 100}%"></div>
-                                                    <div class="bg-slate-300 h-full" style="width: {(s.sentiment.neutral / (s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral)) * 100}%"></div>
-                                                    <div class="bg-red-400 h-full" style="width: {(s.sentiment.negative / (s.sentiment.positive + s.sentiment.negative + s.sentiment.neutral)) * 100}%"></div>
+                                                    <div
+                                                        class="bg-emerald-400 h-full"
+                                                        style="width: {(s
+                                                            .sentiment
+                                                            .positive /
+                                                            (s.sentiment
+                                                                .positive +
+                                                                s.sentiment
+                                                                    .negative +
+                                                                s.sentiment
+                                                                    .neutral)) *
+                                                            100}%"
+                                                    ></div>
+                                                    <div
+                                                        class="bg-slate-300 h-full"
+                                                        style="width: {(s
+                                                            .sentiment.neutral /
+                                                            (s.sentiment
+                                                                .positive +
+                                                                s.sentiment
+                                                                    .negative +
+                                                                s.sentiment
+                                                                    .neutral)) *
+                                                            100}%"
+                                                    ></div>
+                                                    <div
+                                                        class="bg-red-400 h-full"
+                                                        style="width: {(s
+                                                            .sentiment
+                                                            .negative /
+                                                            (s.sentiment
+                                                                .positive +
+                                                                s.sentiment
+                                                                    .negative +
+                                                                s.sentiment
+                                                                    .neutral)) *
+                                                            100}%"
+                                                    ></div>
                                                 {/if}
                                             </div>
                                         </div>
@@ -2932,13 +3131,25 @@
                                     <!-- Topics -->
                                     {#if s.topics.length > 0}
                                         <div>
-                                            <span class="text-[10px] text-txt-faint font-medium">🏷️ Topics</span>
-                                            <div class="flex flex-wrap gap-1 mt-1">
+                                            <span
+                                                class="text-[10px] text-txt-faint font-medium"
+                                                >🏷️ Topics</span
+                                            >
+                                            <div
+                                                class="flex flex-wrap gap-1 mt-1"
+                                            >
                                                 {#each s.topics.slice(0, 3) as topic}
-                                                    <span class="text-[9px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100 truncate max-w-[120px]">{topic}</span>
+                                                    <span
+                                                        class="text-[9px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100 truncate max-w-[120px]"
+                                                        >{topic}</span
+                                                    >
                                                 {/each}
                                                 {#if s.topics.length > 3}
-                                                    <span class="text-[9px] px-1.5 py-0.5 bg-surface-100 text-txt-faint rounded-full">+{s.topics.length - 3}</span>
+                                                    <span
+                                                        class="text-[9px] px-1.5 py-0.5 bg-surface-100 text-txt-faint rounded-full"
+                                                        >+{s.topics.length -
+                                                            3}</span
+                                                    >
                                                 {/if}
                                             </div>
                                         </div>
@@ -3229,6 +3440,194 @@
                         {/each}
                     </div>
                 {/if}
+            </div>
+        {/if}
+
+        <!-- ═══════════════════ PUBLISH TAB ═══════════════════ -->
+        {#if activeTab === "publish"}
+            <div class="max-w-3xl space-y-6">
+                <div>
+                    <h2 class="text-lg font-bold text-txt-primary mb-1">
+                        Publish Meeting
+                    </h2>
+                    <p class="text-sm text-txt-faint">
+                        Push this meeting's data to external platforms.
+                    </p>
+                </div>
+
+                <!-- Notion Card -->
+                <div
+                    class="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden"
+                >
+                    <div
+                        class="bg-gradient-to-r from-gray-900 to-gray-800 px-6 py-4"
+                    >
+                        <div class="flex items-center gap-3">
+                            <div
+                                class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"
+                            >
+                                <span class="text-xl">📝</span>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-bold text-base">
+                                    Notion
+                                </h3>
+                                <p class="text-gray-400 text-xs">
+                                    Create a rich Notion page with all meeting
+                                    data
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-6 py-5">
+                        <div class="text-xs text-txt-faint mb-4 space-y-1">
+                            <p>
+                                📋 Summary (EN + Hindi) · 👥 Speaker summaries ·
+                                ✅ Action items
+                            </p>
+                            <p>
+                                🏷️ Topics · 📊 Sentiment analysis · 👤 Speaker
+                                list
+                            </p>
+                        </div>
+                        {#if notionResult?.success}
+                            <div
+                                class="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-4"
+                            >
+                                <Check size={16} class="text-emerald-600" />
+                                <div class="flex-1">
+                                    <span
+                                        class="text-sm font-medium text-emerald-800"
+                                        >Published to Notion</span
+                                    >
+                                    {#if notionResult.page_url}
+                                        <a
+                                            href={notionResult.page_url}
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="text-xs text-emerald-600 hover:underline flex items-center gap-1 mt-0.5"
+                                        >
+                                            Open page <ExternalLink size={11} />
+                                        </a>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/if}
+                        <button
+                            class="btn-primary text-sm w-full justify-center"
+                            on:click={async () => {
+                                pushingNotion = true;
+                                notionResult = null;
+                                try {
+                                    notionResult = await post(
+                                        api.notionPush(meetingId),
+                                    );
+                                    toasts.success("Published to Notion!");
+                                } catch (err) {
+                                    toasts.error(
+                                        "Notion push failed: " + err.message,
+                                    );
+                                }
+                                pushingNotion = false;
+                            }}
+                            disabled={pushingNotion}
+                        >
+                            {#if pushingNotion}
+                                <Loader2 size={15} class="animate-spin" /> Pushing
+                                to Notion…
+                            {:else}
+                                <Share2 size={15} /> Push to Notion
+                            {/if}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Confluence Card -->
+                <div
+                    class="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden"
+                >
+                    <div
+                        class="bg-gradient-to-r from-blue-700 to-blue-600 px-6 py-4"
+                    >
+                        <div class="flex items-center gap-3">
+                            <div
+                                class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"
+                            >
+                                <span class="text-xl">🏢</span>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-bold text-base">
+                                    Confluence
+                                </h3>
+                                <p class="text-blue-200 text-xs">
+                                    Create a wiki page with Jira ticket links
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-6 py-5">
+                        <div class="text-xs text-txt-faint mb-4 space-y-1">
+                            <p>
+                                📋 Summary · 👥 Speaker summaries · ✅ Action
+                                items table
+                            </p>
+                            <p>
+                                🏷️ Topics · 📊 Sentiment · 🔗 Linked Jira
+                                tickets
+                            </p>
+                        </div>
+                        {#if confluenceResult?.success}
+                            <div
+                                class="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4"
+                            >
+                                <Check size={16} class="text-blue-600" />
+                                <div class="flex-1">
+                                    <span
+                                        class="text-sm font-medium text-blue-800"
+                                        >Published to Confluence</span
+                                    >
+                                    {#if confluenceResult.page_url}
+                                        <a
+                                            href={confluenceResult.page_url}
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-0.5"
+                                        >
+                                            Open page <ExternalLink size={11} />
+                                        </a>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/if}
+                        <button
+                            class="btn-primary text-sm w-full justify-center"
+                            on:click={async () => {
+                                pushingConfluence = true;
+                                confluenceResult = null;
+                                try {
+                                    confluenceResult = await post(
+                                        api.confluencePush(meetingId),
+                                    );
+                                    toasts.success("Published to Confluence!");
+                                } catch (err) {
+                                    toasts.error(
+                                        "Confluence push failed: " +
+                                            err.message,
+                                    );
+                                }
+                                pushingConfluence = false;
+                            }}
+                            disabled={pushingConfluence}
+                        >
+                            {#if pushingConfluence}
+                                <Loader2 size={15} class="animate-spin" /> Pushing
+                                to Confluence…
+                            {:else}
+                                <Share2 size={15} /> Push to Confluence
+                            {/if}
+                        </button>
+                    </div>
+                </div>
             </div>
         {/if}
     </div>

@@ -35,6 +35,12 @@ export const api = {
     index: (id) => `${API_BASE}/chat/index/${id}`,
     clear: (id) => `${API_BASE}/chat/clear/${id}`,
   },
+  // Notion Integration
+  notionStatus: `${API_BASE}/notion/status`,
+  notionPush: (id) => `${API_BASE}/meeting/${id}/notion/push`,
+  // Confluence Integration
+  confluenceStatus: `${API_BASE}/confluence/status`,
+  confluencePush: (id) => `${API_BASE}/meeting/${id}/confluence/push`,
 };
 
 /** Helper for GET requests */

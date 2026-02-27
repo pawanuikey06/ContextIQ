@@ -95,6 +95,7 @@ class MeetingRAGService:
 
         # Create LangChain Documents — one per segment
         docs = []
+        all_speakers = set()
         for i, seg in enumerate(segments):
             raw_speaker = seg.get("speaker", "UNKNOWN")
             speaker = speaker_map.get(raw_speaker, raw_speaker)
@@ -105,6 +106,7 @@ class MeetingRAGService:
             if not text:
                 continue
 
+            all_speakers.add(speaker)
             doc = Document(
                 page_content=f"[{meeting_date}, {meeting_day}] {speaker}: {text}",
                 metadata={
@@ -121,12 +123,46 @@ class MeetingRAGService:
             )
             docs.append(doc)
 
+        # ── Meeting-level summary chunk ──
+        # Ensures cross-meeting queries (e.g. "who spoke in both meetings?")
+        # can be answered accurately from a single chunk.
+        sorted_speakers = sorted(all_speakers)
+        first_start = segments[0].get("start", 0.0) if segments else 0.0
+        last_end = segments[-1].get("end", 0.0) if segments else 0.0
+        duration_min = round((last_end - first_start) / 60, 1)
+        summary_text = (
+            f"MEETING SUMMARY — {meeting_title}\n"
+            f"Date: {meeting_date}, {meeting_day}\n"
+            f"Duration: {duration_min} minutes\n"
+            f"Total segments: {len(segments)}\n"
+            f"Number of speakers: {len(sorted_speakers)}\n"
+            f"Speakers in this meeting: {', '.join(sorted_speakers)}\n"
+            f"IMPORTANT: ONLY the speakers listed above participated in this meeting."
+        )
+        summary_doc = Document(
+            page_content=summary_text,
+            metadata={
+                "meeting_id": meeting_id,
+                "meeting_title": meeting_title,
+                "speaker": "SUMMARY",
+                "speaker_id": "SUMMARY",
+                "start": first_start,
+                "end": last_end,
+                "chunk_index": -1,
+                "meeting_date": meeting_date,
+                "meeting_day": meeting_day,
+                "is_summary": "true",
+            },
+        )
+        docs.append(summary_doc)
+
         # Add to ChromaDB
         if docs:
-            ids = [f"{meeting_id}_seg_{i}" for i in range(len(docs))]
+            ids = [f"{meeting_id}_seg_{i}" for i in range(len(docs) - 1)]
+            ids.append(f"{meeting_id}_summary")
             self._vectorstore.add_documents(docs, ids=ids)
             logger.info(
-                "[%s] Indexed %d segments into ChromaDB", meeting_id, len(docs)
+                "[%s] Indexed %d segments + 1 summary into ChromaDB", meeting_id, len(docs) - 1
             )
 
         return len(docs)
@@ -149,7 +185,7 @@ class MeetingRAGService:
     # ------------------------------------------------------------------
     # Diverse Retrieval — ensures chunks from ALL meetings
     # ------------------------------------------------------------------
-    def _diverse_retrieve(self, question: str, meeting_ids=None, target_k=12, fetch_k=25):
+    def _diverse_retrieve(self, question: str, meeting_ids=None, target_k=18, fetch_k=40):
         """
         Retrieve chunks across ALL indexed meetings.
         Fetches fetch_k candidates, groups by meeting, then round-robins
@@ -302,7 +338,13 @@ RULES:
 3. Give clean, natural answers. Do NOT include timestamps, speaker names in parentheses, or source references in your response. The UI shows sources separately.
 4. Be concise but thorough.
 5. When asked about dates or days (e.g. "what did we discuss on Monday"), use the INDEXED MEETINGS list above to identify which meetings match, then answer from their content.
-6. The date shown in brackets at the start of each excerpt tells you when that meeting happened."""
+6. The date shown in brackets at the start of each excerpt tells you when that meeting happened.
+
+SPEAKER ACCURACY RULES (CRITICAL):
+7. Only confirm a speaker is in a meeting if you see their name in the MEETING SUMMARY or their actual speech segments in the excerpts for THAT specific meeting.
+8. When comparing speakers across meetings, check each meeting's MEETING SUMMARY independently. A speaker is "common" to both meetings ONLY if they appear in BOTH meeting summaries.
+9. For questions about speaker presence, look for MEETING SUMMARY chunks which list all speakers. Do NOT guess based on partial context.
+10. Never assume a speaker is in a meeting just because they are mentioned by another speaker. Only count speakers who actually SPOKE in the meeting."""
 
         # Build messages
         messages = [SystemMessage(content=system_prompt)]
@@ -320,7 +362,7 @@ RULES:
             model="llama-3.3-70b-versatile",
             openai_api_key=self._api_key,
             openai_api_base="https://api.groq.com/openai/v1",
-            temperature=0.3,
+            temperature=0.1,
         )
         response = llm.invoke(messages)
         answer = response.content
@@ -452,7 +494,13 @@ RULES:
 3. Give clean, natural answers. Do NOT include timestamps, speaker names in parentheses, or source references in your response. The UI shows sources separately.
 4. Be concise but thorough.
 5. When asked about dates or days (e.g. "what did we discuss on Monday"), use the INDEXED MEETINGS list above to identify which meetings match, then answer from their content.
-6. The date shown in brackets at the start of each excerpt tells you when that meeting happened."""
+6. The date shown in brackets at the start of each excerpt tells you when that meeting happened.
+
+SPEAKER ACCURACY RULES (CRITICAL):
+7. Only confirm a speaker is in a meeting if you see their name in the MEETING SUMMARY or their actual speech segments in the excerpts for THAT specific meeting.
+8. When comparing speakers across meetings, check each meeting's MEETING SUMMARY independently. A speaker is "common" to both meetings ONLY if they appear in BOTH meeting summaries.
+9. For questions about speaker presence, look for MEETING SUMMARY chunks which list all speakers. Do NOT guess based on partial context.
+10. Never assume a speaker is in a meeting just because they are mentioned by another speaker. Only count speakers who actually SPOKE in the meeting."""
 
         # Build messages
         messages = [SystemMessage(content=system_prompt)]
@@ -465,7 +513,7 @@ RULES:
             model="llama-3.3-70b-versatile",
             openai_api_key=self._api_key,
             openai_api_base="https://api.groq.com/openai/v1",
-            temperature=0.3,
+            temperature=0.1,
             streaming=True,
         )
 

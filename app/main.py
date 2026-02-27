@@ -17,6 +17,8 @@ from app.api.insights import router as insights_router
 from app.api.stats import router as stats_router
 from app.api.search import router as search_router
 from app.api.jira import router as jira_router
+from app.api.notion import router as notion_router
+from app.api.confluence import router as confluence_router
 
 # Configure logging
 logging.basicConfig(
@@ -56,6 +58,8 @@ app.include_router(insights_router, tags=["Insights"])
 app.include_router(stats_router, tags=["Stats"])
 app.include_router(search_router, tags=["Search"])
 app.include_router(jira_router, tags=["Jira"])
+app.include_router(notion_router, tags=["Notion"])
+app.include_router(confluence_router, tags=["Confluence"])
 
 
 @app.get("/")
@@ -100,6 +104,10 @@ async def root():
             "POST /meeting/{meeting_id}/jira/push",
             "POST /meeting/{meeting_id}/jira/sync",
             "PUT  /meeting/{meeting_id}/jira/update",
+            "GET  /notion/status",
+            "POST /meeting/{meeting_id}/notion/push",
+            "GET  /confluence/status",
+            "POST /meeting/{meeting_id}/confluence/push",
         ]
     }
 

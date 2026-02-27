@@ -181,6 +181,38 @@ async def save_speaker_map(
 
     logger.info("[%s] Speaker map saved: %s", meeting_id, body.speaker_map)
 
+    # Save voice profiles for named speakers (non-fatal)
+    try:
+        from app.services.voice_embedding_service import VoiceEmbeddingService
+        voice_svc = VoiceEmbeddingService()
+        clips_dir = STORAGE_DIR / meeting_id / "speaker_clips"
+        if clips_dir.exists():
+            saved_count = 0
+            for spk_id, real_name in body.speaker_map.items():
+                if not real_name.strip():
+                    continue
+                clip_path = clips_dir / f"{spk_id}.wav"
+                if not clip_path.exists():
+                    logger.warning("[%s] ⚠️ No clip file for %s at %s", meeting_id, spk_id, clip_path)
+                    continue
+                logger.info("[%s] 🎤 Generating embedding for %s → '%s' from %s",
+                            meeting_id, spk_id, real_name, clip_path)
+                try:
+                    emb = voice_svc.generate_embedding(str(clip_path))
+                    if emb:
+                        voice_svc.save_speaker_profile(real_name.strip(), emb)
+                        saved_count += 1
+                    else:
+                        logger.warning("[%s] ⚠️ Embedding returned None for %s", meeting_id, spk_id)
+                except Exception as emb_err:
+                    logger.error("[%s] ❌ Embedding failed for %s: %s", meeting_id, spk_id, emb_err,
+                                 exc_info=True)
+            logger.info("[%s] Speaker voice profiles saved: %d/%d", meeting_id, saved_count, len(body.speaker_map))
+        else:
+            logger.warning("[%s] ⚠️ No speaker_clips directory found at %s", meeting_id, clips_dir)
+    except Exception as e:
+        logger.error("[%s] ❌ Voice profile save failed: %s", meeting_id, e, exc_info=True)
+
     # Queue background regeneration of all insights
     background_tasks.add_task(_regenerate_all_insights, meeting_id)
 

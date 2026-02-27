@@ -31,6 +31,7 @@ tokenizers==0.22.2
 numpy==2.2.6
 scipy==1.15.3
 scikit-learn==1.7.2
+speechbrain==1.0.3
 
 # ── LangChain / RAG ──
 langchain==1.2.10

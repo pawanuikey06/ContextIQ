@@ -16,6 +16,7 @@
         Smile,
         CheckCircle2,
         Zap,
+        Trash2,
     } from "lucide-svelte";
     import { api, get, post } from "../lib/api.js";
     import { formatTime, shortId } from "../lib/utils.js";
@@ -228,6 +229,21 @@
 
     function openMeeting(id) {
         push(`/meetings/${id}`);
+    }
+
+    async function deleteMeeting(e, meetingId, meetingTitle) {
+        e.stopPropagation();
+        if (!confirm(`Delete "${meetingTitle}"? This cannot be undone.`))
+            return;
+        try {
+            await fetch(`${api.base}/meeting/${meetingId}`, {
+                method: "DELETE",
+            });
+            toasts.success("Meeting deleted");
+            await Promise.all([loadMeetings(), loadStats()]);
+        } catch (err) {
+            toasts.error("Delete failed: " + err.message);
+        }
     }
 
     function getGreeting() {
@@ -714,10 +730,26 @@
                                     <span class={badge.cls}>{badge.label}</span>
                                 </td>
                                 <td class="text-right">
-                                    <ArrowUpRight
-                                        size={14}
-                                        class="text-gray-300"
-                                    />
+                                    <div
+                                        class="flex items-center justify-end gap-1.5"
+                                    >
+                                        <button
+                                            class="w-7 h-7 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                            title="Delete meeting"
+                                            on:click={(e) =>
+                                                deleteMeeting(
+                                                    e,
+                                                    meeting.id,
+                                                    meeting.title,
+                                                )}
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                        <ArrowUpRight
+                                            size={14}
+                                            class="text-gray-300"
+                                        />
+                                    </div>
                                 </td>
                             </tr>
                         {/each}

@@ -39,6 +39,7 @@
         shortId,
     } from "../lib/utils.js";
     import Skeleton from "../components/Skeleton.svelte";
+    import SpeakerAudioPlayer from "../components/SpeakerAudioPlayer.svelte";
     import {
         Chart,
         DoughnutController,
@@ -745,8 +746,14 @@
                 >
                     {#each speakerList as spk}
                         <div class="relative">
+                            <div class="mb-1">
+                                <SpeakerAudioPlayer
+                                    {meetingId}
+                                    speakerId={spk}
+                                />
+                            </div>
                             <span
-                                class="absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
+                                class="absolute left-2.5 bottom-[10px] w-2 h-2 rounded-full"
                                 style="background-color: {getColor(spk)}"
                             ></span>
                             <input

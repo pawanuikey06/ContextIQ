@@ -42,6 +42,8 @@ export const api = {
   confluenceStatus: `${API_BASE}/confluence/status`,
   confluencePush: (id) => `${API_BASE}/meeting/${id}/confluence/push`,
   video: (id) => `${API_BASE}/meeting/${id}/video`,
+  speakerClips: (id) => `${API_BASE}/meeting/${id}/speaker-clips`,
+  speakerClip: (id, spk) => `${API_BASE}/meeting/${id}/speaker-clips/${encodeURIComponent(spk)}`,
 };
 
 /** Helper for GET requests */

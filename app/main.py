@@ -19,6 +19,7 @@ from app.api.search import router as search_router
 from app.api.jira import router as jira_router
 from app.api.notion import router as notion_router
 from app.api.confluence import router as confluence_router
+from app.api.voice_profiles import router as voice_profiles_router
 
 # Configure logging
 logging.basicConfig(
@@ -60,6 +61,7 @@ app.include_router(search_router, tags=["Search"])
 app.include_router(jira_router, tags=["Jira"])
 app.include_router(notion_router, tags=["Notion"])
 app.include_router(confluence_router, tags=["Confluence"])
+app.include_router(voice_profiles_router, tags=["Voice Profiles"])
 
 
 @app.get("/")

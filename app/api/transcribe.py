@@ -24,6 +24,50 @@ _stt_service = None
 _speaker_builder = None
 _storage_service = None
 
+STORAGE_DIR = Path("storage")
+MEETING_COUNTER_FILE = STORAGE_DIR / "_meeting_counter.json"
+
+
+def _get_meeting_number(meeting_id: str) -> int:
+    """
+    Get or assign a sequential meeting number (1, 2, 3, ...) for the given meeting_id.
+    Persisted in storage/_meeting_counter.json.
+    """
+    counter_data = {}
+    if MEETING_COUNTER_FILE.exists():
+        try:
+            with open(MEETING_COUNTER_FILE, "r", encoding="utf-8") as f:
+                counter_data = json.load(f)
+        except Exception:
+            counter_data = {}
+
+    if meeting_id in counter_data:
+        return counter_data[meeting_id]
+
+    existing_numbers = list(counter_data.values()) if counter_data else []
+    next_number = max(existing_numbers) + 1 if existing_numbers else 1
+    counter_data[meeting_id] = next_number
+
+    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(MEETING_COUNTER_FILE, "w", encoding="utf-8") as f:
+        json.dump(counter_data, f, indent=2)
+
+    logger.info("[%s] Assigned meeting number: m%d", meeting_id, next_number)
+    return next_number
+
+
+def _add_meeting_suffix_to_speakers(segments: list, meeting_number: int) -> list:
+    """
+    Post-process segments to append _m{N} suffix to all speaker labels.
+    e.g. SPEAKER_00 → SPEAKER_00_m1
+    """
+    suffix = f"_m{meeting_number}"
+    for seg in segments:
+        speaker = seg.get("speaker", "UNKNOWN")
+        if speaker and speaker != "UNKNOWN" and not speaker.endswith(suffix):
+            seg["speaker"] = f"{speaker}{suffix}"
+    return segments
+
 
 def _get_services():
     """Lazy-init services on first request."""
@@ -58,10 +102,15 @@ async def transcribe_meeting(meeting_id: str):
     try:
         stt_service, speaker_builder, storage_service = _get_services()
 
-        # Step 1: Transcribe + diarize (WhisperX)
+        # Step 1: Transcribe + diarize
         result = stt_service.transcribe(str(audio_path))
         segments = result["segments"]
         logger.info(f"[{meeting_id}] Transcription complete: {len(segments)} segments")
+
+        # Step 1b: Add meeting number suffix to speaker labels
+        meeting_number = _get_meeting_number(meeting_id)
+        segments = _add_meeting_suffix_to_speakers(segments, meeting_number)
+        logger.info(f"[{meeting_id}] Speaker labels updated with suffix _m{meeting_number}")
 
         # Step 2: Build speaker-wise grouping
         speakers = speaker_builder.build(segments)
@@ -76,6 +125,28 @@ async def transcribe_meeting(meeting_id: str):
         }
         storage_path = storage_service.save(meeting_id, transcript_data)
         logger.info(f"[{meeting_id}] Transcript saved: {storage_path}")
+
+        # Step 3a: Extract speaker clips + auto-match known speakers (non-fatal)
+        # NOTE: Must run AFTER transcript is saved — extract_speaker_clips reads transcript.json from disk
+        try:
+            from app.services.voice_embedding_service import VoiceEmbeddingService
+            _voice_svc = VoiceEmbeddingService()
+            _voice_svc.extract_speaker_clips(meeting_id)
+            auto_matches = _voice_svc.match_speakers(meeting_id)
+            if auto_matches:
+                # Update segments with matched names and re-save
+                for seg in segments:
+                    spk = seg.get("speaker", "")
+                    if spk in auto_matches:
+                        seg["speaker"] = auto_matches[spk]
+                # Re-build speaker grouping with matched names
+                speakers = speaker_builder.build(segments)
+                transcript_data["segments"] = segments
+                transcript_data["speakers"] = speakers
+                storage_service.save(meeting_id, transcript_data)
+                logger.info(f"[{meeting_id}] Auto-matched speakers: {auto_matches} — transcript re-saved")
+        except Exception as e:
+            logger.warning(f"[{meeting_id}] Voice embedding step skipped: {e}")
 
         # Step 3b: Auto-create metadata.json with processing info
         try:

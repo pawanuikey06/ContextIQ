@@ -312,3 +312,53 @@ async def get_meeting_video(meeting_id: str, request: Request):
             filename=f"{meeting_id}.mp4",
             headers={"Accept-Ranges": "bytes"},
         )
+
+
+# ------------------------------------------------------------------
+# Delete Meeting
+# ------------------------------------------------------------------
+@router.delete("/meeting/{meeting_id}")
+async def delete_meeting(meeting_id: str):
+    """
+    Permanently delete a meeting: storage dir, audio, video, and ChromaDB index.
+    """
+    import shutil
+
+    meeting_dir = STORAGE_DIR / meeting_id
+    audio_path = Path("data/audio") / f"{meeting_id}.wav"
+    video_path = meeting_dir / "video.mp4"
+
+    deleted = []
+
+    # 1. Remove from ChromaDB (RAG)
+    try:
+        from app.api.chat import _get_rag_service
+        rag = _get_rag_service()
+        rag._delete_meeting_docs(meeting_id)
+        deleted.append("chromadb")
+        logger.info("[%s] Removed from ChromaDB", meeting_id)
+    except Exception as e:
+        logger.warning("[%s] ChromaDB cleanup failed: %s", meeting_id, e)
+
+    # 2. Remove storage directory
+    if meeting_dir.exists():
+        shutil.rmtree(str(meeting_dir))
+        deleted.append("storage")
+        logger.info("[%s] Storage directory removed", meeting_id)
+
+    # 3. Remove audio file
+    if audio_path.exists():
+        audio_path.unlink()
+        deleted.append("audio")
+        logger.info("[%s] Audio file removed", meeting_id)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Meeting {meeting_id} not found")
+
+    logger.info("[%s] Meeting deleted: %s", meeting_id, deleted)
+    return {
+        "success": True,
+        "meeting_id": meeting_id,
+        "deleted": deleted,
+        "message": f"Meeting {meeting_id} permanently deleted",
+    }

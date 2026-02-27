@@ -9,8 +9,9 @@ Adds to existing diarization.py:
 import json
 import logging
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+from starlette.responses import StreamingResponse
 
 from app.schemas.schemas import (
     MeetingResponse,
@@ -252,21 +253,62 @@ async def update_metadata(meeting_id: str, body: MeetingMetadataRequest):
 
 
 # ------------------------------------------------------------------
-# Video Playback
+# Video Playback (with Range request support for seeking)
 # ------------------------------------------------------------------
 @router.head("/meeting/{meeting_id}/video")
 @router.get("/meeting/{meeting_id}/video")
-async def get_meeting_video(meeting_id: str):
+async def get_meeting_video(meeting_id: str, request: Request):
     """
     Stream the original video file for in-browser playback.
+    Supports HTTP Range requests so the browser can seek to arbitrary positions.
     Video is stored at storage/{meeting_id}/video.mp4
     """
+    import os
+
     video_path = STORAGE_DIR / meeting_id / "video.mp4"
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video not found for this meeting")
 
-    return FileResponse(
-        path=str(video_path),
-        media_type="video/mp4",
-        filename=f"{meeting_id}.mp4",
-    )
+    file_size = os.path.getsize(video_path)
+
+    range_header = request.headers.get("range")
+
+    if range_header:
+        # Parse Range: bytes=start-end
+        range_spec = range_header.replace("bytes=", "")
+        parts = range_spec.split("-")
+        start = int(parts[0]) if parts[0] else 0
+        end = int(parts[1]) if parts[1] else file_size - 1
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+
+        def iter_file():
+            with open(video_path, "rb") as f:
+                f.seek(start)
+                remaining = content_length
+                while remaining > 0:
+                    chunk_size = min(8192, remaining)
+                    data = f.read(chunk_size)
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
+
+        return StreamingResponse(
+            iter_file(),
+            status_code=206,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+                "Content-Type": "video/mp4",
+            },
+        )
+    else:
+        # No Range header — return full file with Accept-Ranges
+        return FileResponse(
+            path=str(video_path),
+            media_type="video/mp4",
+            filename=f"{meeting_id}.mp4",
+            headers={"Accept-Ranges": "bytes"},
+        )

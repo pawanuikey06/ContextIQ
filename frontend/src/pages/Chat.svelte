@@ -9,9 +9,11 @@
         Sparkles,
         Bot,
         User,
+        Play,
     } from "lucide-svelte";
     import { api, get, post } from "../lib/api.js";
     import { shortId, formatTime } from "../lib/utils.js";
+    import VideoSidePanel from "../components/VideoSidePanel.svelte";
 
     let sessionId = crypto.randomUUID();
     let messages = [];
@@ -22,6 +24,30 @@
     let indexedMeetings = [];
     let selectedMeetings = [];
     let indexingAll = false;
+
+    // Video side panel state
+    let videoMeetingId = null;
+    let videoStartTime = 0;
+    let videoPanelRef = null;
+
+    function openVideo(meetingId, startSeconds) {
+        if (videoMeetingId && videoPanelRef) {
+            // Panel already open — use seekTo for smooth navigation
+            videoMeetingId = meetingId;
+            videoStartTime = startSeconds;
+            videoPanelRef.seekTo(meetingId, startSeconds);
+        } else {
+            // First open — set state to mount the component
+            videoMeetingId = meetingId;
+            videoStartTime = startSeconds;
+        }
+    }
+
+    function closeVideo() {
+        videoMeetingId = null;
+        videoStartTime = 0;
+        videoPanelRef = null;
+    }
 
     const quickPrompts = [
         "Summarize all my meetings",
@@ -323,11 +349,22 @@
                                                         <span class="mx-1"
                                                             >·</span
                                                         >
-                                                        <span class="font-mono"
-                                                            >{formatTime(
+                                                        <button
+                                                            class="font-mono inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-brand-100 text-brand-700 hover:bg-brand-200 hover:text-brand-800 transition-colors cursor-pointer border-none"
+                                                            title="Play video at {formatTime(
                                                                 c.start,
-                                                            )}</span
+                                                            )}"
+                                                            on:click={() =>
+                                                                openVideo(
+                                                                    c.meeting_id,
+                                                                    c.start,
+                                                                )}
                                                         >
+                                                            <Play size={9} />
+                                                            {formatTime(
+                                                                c.start,
+                                                            )}
+                                                        </button>
                                                         <span class="mx-1"
                                                             >·</span
                                                         >
@@ -386,4 +423,14 @@
             </div>
         </div>
     </div>
+
+    <!-- Video Side Panel -->
+    {#if videoMeetingId}
+        <VideoSidePanel
+            bind:this={videoPanelRef}
+            meetingId={videoMeetingId}
+            startTime={videoStartTime}
+            on:close={closeVideo}
+        />
+    {/if}
 </div>

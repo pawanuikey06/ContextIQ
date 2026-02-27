@@ -41,6 +41,7 @@ export const api = {
   // Confluence Integration
   confluenceStatus: `${API_BASE}/confluence/status`,
   confluencePush: (id) => `${API_BASE}/meeting/${id}/confluence/push`,
+  video: (id) => `${API_BASE}/meeting/${id}/video`,
 };
 
 /** Helper for GET requests */

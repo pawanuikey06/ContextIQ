@@ -69,6 +69,11 @@
     let rewritePrompt = "";
     let showRewriteBox = false;
 
+    // Email modal
+    let showEmailModal = false;
+    let emailInput = "";
+    let sendingEmail = false;
+
     // Speaker mapping
     let smap = {};
     let renameInputs = {};
@@ -108,6 +113,14 @@
     let notionResult = null;
     let confluenceResult = null;
 
+    // Full Report PDF
+    let generatingReport = false;
+    let reportReady = false;
+    let reportResult = null;
+    let showReportEmailModal = false;
+    let reportEmailInput = "";
+    let sendingReportEmail = false;
+
     const tabs = [
         {
             id: "chat",
@@ -126,15 +139,6 @@
             bg: "bg-emerald-50",
             border: "border-emerald-100",
             desc: "View contributions grouped by each participant with talk-time stats.",
-        },
-        {
-            id: "timeline",
-            label: "Timeline",
-            icon: Clock,
-            color: "text-amber-600",
-            bg: "bg-amber-50",
-            border: "border-amber-100",
-            desc: "Chronological segment timeline with timestamps and speaker flow.",
         },
         {
             id: "summary",
@@ -173,15 +177,6 @@
             desc: "Analyze emotional tone and mood shifts throughout the meeting.",
         },
         {
-            id: "speakerStats",
-            label: "Speaker Stats",
-            icon: Activity,
-            color: "text-cyan-600",
-            bg: "bg-cyan-50",
-            border: "border-cyan-100",
-            desc: "Detailed per-speaker metrics: talk-time, words/min, interruptions.",
-        },
-        {
             id: "keywords",
             label: "Keyword Cloud",
             icon: Tag,
@@ -200,15 +195,6 @@
             desc: "Topic segmentation — what was discussed when during the meeting.",
         },
         {
-            id: "speakerReport",
-            label: "Speaker Report",
-            icon: UserCheck,
-            color: "text-teal-600",
-            bg: "bg-teal-50",
-            border: "border-teal-100",
-            desc: "Per-speaker report cards with role classification and comprehensive metrics.",
-        },
-        {
             id: "publish",
             label: "Publish",
             icon: Share2,
@@ -216,6 +202,15 @@
             bg: "bg-pink-50",
             border: "border-pink-100",
             desc: "Push meeting data to Notion or Confluence.",
+        },
+        {
+            id: "fullReport",
+            label: "Full Report",
+            icon: Download,
+            color: "text-cyan-600",
+            bg: "bg-cyan-50",
+            border: "border-cyan-100",
+            desc: "Generate comprehensive PDF report with all meeting insights.",
         },
     ];
 
@@ -360,13 +355,36 @@
     }
 
     async function sendEmail() {
+        const recipients = emailInput
+            .split(/[,;\s]+/)
+            .map((e) => e.trim())
+            .filter((e) => e.length > 0);
+
+        if (recipients.length === 0) {
+            toasts.error("Please enter at least one email address.");
+            return;
+        }
+
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const invalid = recipients.filter((e) => !emailRegex.test(e));
+        if (invalid.length > 0) {
+            toasts.error("Invalid email(s): " + invalid.join(", "));
+            return;
+        }
+
+        sendingEmail = true;
         try {
             const res = await post(api.publish(meetingId), {
                 meeting_title: autoTitle || `Meeting ${shortId(meetingId)}`,
-                email_recipients: ["pawanuikey690@gmail.com"],
+                email_recipients: recipients,
             });
             if (res.email?.success) {
-                toasts.success("Email sent successfully!");
+                toasts.success(
+                    "Email sent successfully to " + recipients.join(", ") + "!",
+                );
+                showEmailModal = false;
+                emailInput = "";
             } else {
                 toasts.error(
                     "Email failed: " + (res.email?.message || "Unknown error"),
@@ -375,6 +393,7 @@
         } catch (err) {
             toasts.error("Email failed: " + err.message);
         }
+        sendingEmail = false;
     }
 
     async function sendToTeams() {
@@ -1236,7 +1255,7 @@
                             </button>
                             <button
                                 class="btn-secondary text-sm"
-                                on:click={sendEmail}
+                                on:click={() => (showEmailModal = true)}
                             >
                                 <Mail size={14} /> Email
                             </button>
@@ -1284,6 +1303,93 @@
                             Review and approve the summary to unlock sharing
                             options.
                         </p>
+                    {/if}
+
+                    <!-- Email Recipients Modal -->
+                    {#if showEmailModal}
+                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                        <div
+                            class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                            on:click|self={() => (showEmailModal = false)}
+                        >
+                            <div
+                                class="bg-white rounded-2xl shadow-2xl border border-surface-200 w-full max-w-md mx-4 overflow-hidden"
+                            >
+                                <!-- Header -->
+                                <div
+                                    class="px-6 pt-5 pb-3 border-b border-surface-100"
+                                >
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="w-9 h-9 rounded-xl bg-brand-100 flex items-center justify-center"
+                                        >
+                                            <Mail
+                                                size={18}
+                                                class="text-brand-600"
+                                            />
+                                        </div>
+                                        <div>
+                                            <h3
+                                                class="text-base font-semibold text-txt-primary"
+                                            >
+                                                Send Summary via Email
+                                            </h3>
+                                            <p class="text-xs text-txt-faint">
+                                                Enter recipient email addresses
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Body -->
+                                <div class="px-6 py-4">
+                                    <label class="block">
+                                        <span
+                                            class="text-[11px] font-semibold text-txt-faint uppercase tracking-wider"
+                                            >Recipients</span
+                                        >
+                                        <textarea
+                                            class="w-full mt-1.5 h-20 text-sm text-txt-secondary bg-surface-50 border border-surface-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 resize-none"
+                                            placeholder="Enter email addresses separated by commas, e.g.&#10;john@example.com, jane@example.com"
+                                            bind:value={emailInput}
+                                        ></textarea>
+                                    </label>
+                                    <p
+                                        class="text-[11px] text-txt-faint mt-1.5"
+                                    >
+                                        Separate multiple emails with commas
+                                    </p>
+                                </div>
+
+                                <!-- Footer -->
+                                <div
+                                    class="px-6 pb-5 flex items-center justify-end gap-2"
+                                >
+                                    <button
+                                        class="btn-secondary text-sm"
+                                        on:click={() =>
+                                            (showEmailModal = false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        class="btn-primary text-sm"
+                                        on:click={sendEmail}
+                                        disabled={sendingEmail ||
+                                            !emailInput.trim()}
+                                    >
+                                        {#if sendingEmail}
+                                            <Loader2
+                                                size={14}
+                                                class="animate-spin"
+                                            /> Sending…
+                                        {:else}
+                                            <Mail size={14} /> Send Email
+                                        {/if}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     {/if}
                 {/if}
             </div>
@@ -2575,257 +2681,62 @@
             </div>
         {/if}
 
-        <!-- ═══════════════════ SPEAKER STATS VIEW ═══════════════════ -->
-        {#if activeTab === "speakerStats"}
-            <div class="max-w-4xl space-y-6">
-                <!-- Load Button -->
-                <div class="flex items-center justify-between">
+        <!-- ─── Quick Stats (computed from transcript) ─── -->
+        {#if activeTab === "speaker" && segments.length > 0}
+            {@const totalDur =
+                segments.length > 0
+                    ? Math.max(...segments.map((s) => s.end))
+                    : 0}
+            {@const totalWords = segments.reduce(
+                (sum, s) => sum + s.text.split(/\s+/).filter((w) => w).length,
+                0,
+            )}
+            <div class="grid grid-cols-3 gap-3 mt-6">
+                <div
+                    class="bg-white border border-surface-200 rounded-xl p-4 text-center"
+                >
+                    <span class="text-2xl font-extrabold text-cyan-600"
+                        >{Object.keys(speakers).length}</span
+                    >
                     <p
-                        class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]"
+                        class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
                     >
-                        Speaker Analytics
+                        Speakers
                     </p>
-                    <button
-                        class="btn-secondary text-sm"
-                        on:click={async () => {
-                            loadingSpeakerAnalytics = true;
-                            try {
-                                speakerAnalyticsData = await get(
-                                    api.speakerAnalytics(meetingId),
-                                );
-                            } catch (e) {
-                                toasts.error(
-                                    "Failed to load speaker analytics",
-                                );
-                            } finally {
-                                loadingSpeakerAnalytics = false;
-                            }
-                        }}
-                        disabled={loadingSpeakerAnalytics}
-                    >
-                        {#if loadingSpeakerAnalytics}
-                            <Loader2 size={14} class="animate-spin" /> Loading…
-                        {:else}
-                            <Activity size={14} />
-                            {speakerAnalyticsData
-                                ? "Refresh"
-                                : "Load Analytics"}
-                        {/if}
-                    </button>
                 </div>
-
-                {#if !speakerAnalyticsData}
-                    <div
-                        class="bg-white border border-surface-200 rounded-2xl p-10 text-center"
+                <div
+                    class="bg-white border border-surface-200 rounded-xl p-4 text-center"
+                >
+                    <span class="text-2xl font-extrabold text-blue-600"
+                        >{Math.floor(totalDur / 60)}m {Math.round(
+                            totalDur % 60,
+                        )}s</span
                     >
-                        <div
-                            class="w-12 h-12 mx-auto rounded-xl bg-cyan-100 flex items-center justify-center mb-4"
-                        >
-                            <Activity size={22} class="text-cyan-600" />
-                        </div>
-                        <h3
-                            class="text-base font-semibold text-txt-primary mb-1"
-                        >
-                            Speaker Analytics
-                        </h3>
-                        <p class="text-sm text-txt-muted max-w-sm mx-auto">
-                            Click "Load Analytics" to see detailed per-speaker
-                            metrics computed from the transcript.
-                        </p>
-                    </div>
-                {:else}
-                    <!-- Summary Cards -->
-                    <div class="grid grid-cols-3 gap-3">
-                        <div
-                            class="bg-white border border-surface-200 rounded-xl p-4 text-center"
-                        >
-                            <span class="text-2xl font-extrabold text-cyan-600"
-                                >{speakerAnalyticsData.total_speakers}</span
-                            >
-                            <p
-                                class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
-                            >
-                                Speakers
-                            </p>
-                        </div>
-                        <div
-                            class="bg-white border border-surface-200 rounded-xl p-4 text-center"
-                        >
-                            <span class="text-2xl font-extrabold text-blue-600"
-                                >{Math.floor(
-                                    speakerAnalyticsData.total_duration / 60,
-                                )}m {Math.round(
-                                    speakerAnalyticsData.total_duration % 60,
-                                )}s</span
-                            >
-                            <p
-                                class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
-                            >
-                                Total Duration
-                            </p>
-                        </div>
-                        <div
-                            class="bg-white border border-surface-200 rounded-xl p-4 text-center"
-                        >
-                            <span
-                                class="text-2xl font-extrabold text-purple-600"
-                                >{speakerAnalyticsData.speakers
-                                    .reduce((a, s) => a + s.word_count, 0)
-                                    .toLocaleString()}</span
-                            >
-                            <p
-                                class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
-                            >
-                                Total Words
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Per-Speaker Table -->
-                    <div
-                        class="bg-white border border-surface-200 rounded-2xl overflow-hidden"
+                    <p
+                        class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
                     >
-                        <table class="w-full">
-                            <thead>
-                                <tr
-                                    class="border-b border-surface-200 bg-surface-50/60"
-                                >
-                                    <th
-                                        class="text-left px-4 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
-                                        >Speaker</th
-                                    >
-                                    <th
-                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
-                                        >Talk Time</th
-                                    >
-                                    <th
-                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
-                                        >Words</th
-                                    >
-                                    <th
-                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
-                                        >WPM</th
-                                    >
-                                    <th
-                                        class="text-center px-3 py-2.5 text-[10px] font-semibold text-txt-faint uppercase tracking-wider"
-                                        >Interruptions</th
-                                    >
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {#each speakerAnalyticsData.speakers as s}
-                                    <tr
-                                        class="border-b border-surface-100 last:border-0 hover:bg-surface-50/40 transition-colors"
-                                    >
-                                        <td class="px-4 py-3">
-                                            <div
-                                                class="flex items-center gap-2.5"
-                                            >
-                                                <div
-                                                    class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                                                    style="background-color: {getColor(
-                                                        s.speaker_id,
-                                                    )}"
-                                                >
-                                                    {s.display_name
-                                                        .charAt(0)
-                                                        .toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <span
-                                                        class="text-[13px] font-semibold text-txt-primary"
-                                                        >{s.display_name}</span
-                                                    >
-                                                    <span
-                                                        class="text-[10px] text-txt-faint ml-2"
-                                                        >{s.segment_count} segs</span
-                                                    >
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td class="px-3 py-3 text-center">
-                                            <div
-                                                class="flex flex-col items-center gap-1"
-                                            >
-                                                <span
-                                                    class="text-[13px] font-semibold text-txt-primary"
-                                                    >{s.talk_time_percent}%</span
-                                                >
-                                                <div
-                                                    class="w-full bg-surface-100 rounded-full h-1.5"
-                                                >
-                                                    <div
-                                                        class="h-full rounded-full transition-all"
-                                                        style="width: {s.talk_time_percent}%; background-color: {getColor(
-                                                            s.speaker_id,
-                                                        )}"
-                                                    ></div>
-                                                </div>
-                                                <span
-                                                    class="text-[10px] text-txt-faint"
-                                                    >{Math.floor(
-                                                        s.talk_time_seconds /
-                                                            60,
-                                                    )}m {Math.round(
-                                                        s.talk_time_seconds %
-                                                            60,
-                                                    )}s</span
-                                                >
-                                            </div>
-                                        </td>
-                                        <td class="px-3 py-3 text-center">
-                                            <span
-                                                class="text-[13px] font-semibold text-txt-primary"
-                                                >{s.word_count.toLocaleString()}</span
-                                            >
-                                        </td>
-                                        <td class="px-3 py-3 text-center">
-                                            <span
-                                                class="text-[13px] font-bold"
-                                                style="color: {s.words_per_minute >
-                                                160
-                                                    ? '#ef4444'
-                                                    : s.words_per_minute > 130
-                                                      ? '#f59e0b'
-                                                      : '#10b981'}"
-                                            >
-                                                {s.words_per_minute}
-                                            </span>
-                                            <span
-                                                class="text-[9px] text-txt-faint block"
-                                                >{s.words_per_minute > 160
-                                                    ? "Fast"
-                                                    : s.words_per_minute > 130
-                                                      ? "Normal"
-                                                      : "Slow"}</span
-                                            >
-                                        </td>
-                                        <td class="px-3 py-3 text-center">
-                                            {#if s.interruptions > 0}
-                                                <span
-                                                    class="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full"
-                                                >
-                                                    {s.interruptions}
-                                                </span>
-                                            {:else}
-                                                <span
-                                                    class="text-[12px] text-txt-faint"
-                                                    >—</span
-                                                >
-                                            {/if}
-                                        </td>
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
-                    </div>
-                {/if}
+                        Total Duration
+                    </p>
+                </div>
+                <div
+                    class="bg-white border border-surface-200 rounded-xl p-4 text-center"
+                >
+                    <span class="text-2xl font-extrabold text-purple-600"
+                        >{totalWords.toLocaleString()}</span
+                    >
+                    <p
+                        class="text-[10px] text-txt-faint uppercase tracking-wider mt-1"
+                    >
+                        Total Words
+                    </p>
+                </div>
             </div>
         {/if}
 
-        <!-- ═══════════════════ SPEAKER REPORT CARDS ═══════════════════ -->
-        {#if activeTab === "speakerReport"}
-            <div class="max-w-5xl space-y-6">
+        <!-- ─── Speaker Report Cards (merged into Speaker Analysis tab) ─── -->
+        {#if activeTab === "speaker"}
+            <div class="max-w-5xl space-y-6 mt-8">
+                <hr class="border-surface-200" />
                 <div class="flex items-center justify-between">
                     <p
                         class="text-[11px] font-semibold text-txt-faint uppercase tracking-[0.15em]"
@@ -3636,6 +3547,261 @@
                     </div>
                 </div>
             </div>
+        {/if}
+
+        <!-- ─── Full Report Tab ─── -->
+        {#if activeTab === "fullReport"}
+            <div class="max-w-3xl space-y-6">
+                <div>
+                    <h2 class="text-lg font-bold text-txt-primary mb-1">
+                        Full Meeting Report
+                    </h2>
+                    <p class="text-sm text-txt-faint">
+                        Generate a comprehensive PDF with all meeting insights.
+                        Missing sections are auto-generated.
+                    </p>
+                </div>
+
+                <!-- Report Content Card -->
+                <div
+                    class="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden"
+                >
+                    <div
+                        class="bg-gradient-to-r from-cyan-600 to-blue-700 px-6 py-4"
+                    >
+                        <div class="flex items-center gap-3">
+                            <div
+                                class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"
+                            >
+                                <FileText size={20} class="text-white" />
+                            </div>
+                            <div>
+                                <h3 class="text-white font-bold text-base">
+                                    Comprehensive Report PDF
+                                </h3>
+                                <p class="text-cyan-100 text-xs">
+                                    All 7 sections auto-generated from your
+                                    meeting
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="px-6 py-5 space-y-4">
+                        <!-- Sections included -->
+                        <div
+                            class="grid grid-cols-2 gap-2 text-xs text-txt-faint"
+                        >
+                            <span>📝 Meeting Summary</span>
+                            <span>👥 Speaker Contributions</span>
+                            <span>✅ Action Items</span>
+                            <span>🏛️ Key Decisions</span>
+                            <span>📋 Requirements</span>
+                            <span>🎯 Meeting Objective</span>
+                            <span class="col-span-2">📌 Next Steps</span>
+                        </div>
+
+                        {#if reportResult}
+                            <div
+                                class="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <Check size={16} class="text-emerald-600" />
+                                    <span
+                                        class="text-sm font-semibold text-emerald-800"
+                                        >Report Ready</span
+                                    >
+                                </div>
+                                {#if reportResult.generated_sections?.length > 0}
+                                    <p class="text-xs text-emerald-700 mt-1">
+                                        Auto-generated: {reportResult.generated_sections.join(
+                                            ", ",
+                                        )}
+                                    </p>
+                                {:else}
+                                    <p class="text-xs text-emerald-700 mt-1">
+                                        All sections loaded from cache.
+                                    </p>
+                                {/if}
+                            </div>
+                        {/if}
+
+                        <!-- Action buttons -->
+                        <div class="flex gap-3">
+                            {#if !reportReady}
+                                <!-- Generate Button -->
+                                <button
+                                    class="btn-primary text-sm flex-1 justify-center"
+                                    on:click={async () => {
+                                        generatingReport = true;
+                                        reportResult = null;
+                                        try {
+                                            reportResult = await post(
+                                                api.fullReportGenerate(
+                                                    meetingId,
+                                                ),
+                                                {},
+                                                300000,
+                                            );
+                                            reportReady = true;
+                                            toasts.success(
+                                                "Full report generated!",
+                                            );
+                                        } catch (err) {
+                                            toasts.error(
+                                                "Report generation failed: " +
+                                                    err.message,
+                                            );
+                                        }
+                                        generatingReport = false;
+                                    }}
+                                    disabled={generatingReport}
+                                >
+                                    {#if generatingReport}
+                                        <Loader2
+                                            size={15}
+                                            class="animate-spin"
+                                        /> Generating Report…
+                                    {:else}
+                                        <Sparkles size={15} /> Generate Report
+                                    {/if}
+                                </button>
+                            {:else}
+                                <!-- Download Button -->
+                                <a
+                                    href={api.fullReport(meetingId)}
+                                    target="_blank"
+                                    class="btn-primary text-sm flex-1 justify-center inline-flex items-center gap-2"
+                                >
+                                    <Download size={15} /> Download PDF
+                                </a>
+
+                                <!-- Email Button -->
+                                <button
+                                    class="btn-secondary text-sm flex-1 justify-center"
+                                    on:click={() => {
+                                        showReportEmailModal = true;
+                                    }}
+                                >
+                                    <Mail size={15} /> Send Email
+                                </button>
+                            {/if}
+                        </div>
+
+                        {#if reportReady}
+                            <button
+                                class="text-xs text-txt-faint hover:text-txt-muted underline"
+                                on:click={async () => {
+                                    generatingReport = true;
+                                    reportResult = null;
+                                    reportReady = false;
+                                    try {
+                                        reportResult = await post(
+                                            api.fullReportGenerate(meetingId),
+                                            {},
+                                            300000,
+                                        );
+                                        reportReady = true;
+                                        toasts.success("Report regenerated!");
+                                    } catch (err) {
+                                        toasts.error(
+                                            "Regeneration failed: " +
+                                                err.message,
+                                        );
+                                    }
+                                    generatingReport = false;
+                                }}
+                                disabled={generatingReport}
+                            >
+                                {#if generatingReport}
+                                    Regenerating…
+                                {:else}
+                                    ↻ Regenerate
+                                {/if}
+                            </button>
+                        {/if}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Email Modal -->
+            {#if showReportEmailModal}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                    class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center"
+                    on:click|self={() => {
+                        showReportEmailModal = false;
+                    }}
+                >
+                    <div
+                        class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
+                    >
+                        <h3 class="text-lg font-bold text-txt-primary">
+                            Send Full Report
+                        </h3>
+                        <p class="text-sm text-txt-faint">
+                            Enter recipient email addresses, separated by
+                            commas.
+                        </p>
+                        <input
+                            type="text"
+                            bind:value={reportEmailInput}
+                            placeholder="email@example.com, another@team.com"
+                            class="w-full border border-surface-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-400"
+                        />
+                        <div class="flex justify-end gap-3">
+                            <button
+                                class="btn-secondary text-sm"
+                                on:click={() => {
+                                    showReportEmailModal = false;
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                class="btn-primary text-sm"
+                                on:click={async () => {
+                                    const recipients = reportEmailInput
+                                        .split(",")
+                                        .map((e) => e.trim())
+                                        .filter((e) => e.length > 0);
+                                    if (recipients.length === 0) {
+                                        toasts.error(
+                                            "Please enter at least one email.",
+                                        );
+                                        return;
+                                    }
+                                    sendingReportEmail = true;
+                                    try {
+                                        await post(
+                                            api.fullReportEmail(meetingId),
+                                            { recipients },
+                                        );
+                                        toasts.success(
+                                            `Report sent to ${recipients.join(", ")}`,
+                                        );
+                                        showReportEmailModal = false;
+                                        reportEmailInput = "";
+                                    } catch (err) {
+                                        toasts.error(
+                                            "Email failed: " + err.message,
+                                        );
+                                    }
+                                    sendingReportEmail = false;
+                                }}
+                                disabled={sendingReportEmail}
+                            >
+                                {#if sendingReportEmail}
+                                    <Loader2 size={14} class="animate-spin" /> Sending…
+                                {:else}
+                                    <Mail size={14} /> Send
+                                {/if}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            {/if}
         {/if}
     </div>
 {/if}

@@ -41,7 +41,9 @@ async def list_meetings():
         return {"meetings": []}
 
     for d in sorted(STORAGE_DIR.iterdir(), reverse=True):
-        if not d.is_dir() or d.name == "chroma_db":
+        # Skip non-meeting directories (system folders)
+        SKIP_DIRS = {"chroma_db", "speaker_profiles", "models", "__pycache__"}
+        if not d.is_dir() or d.name in SKIP_DIRS or d.name.startswith("_"):
             continue
 
         meeting_id = d.name

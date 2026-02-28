@@ -20,13 +20,14 @@ STORAGE_DIR = Path("storage")
 async def get_dashboard_stats():
     """Return aggregate stats across all meetings."""
     total_meetings = 0
-    total_speakers = 0
+    all_speakers = set()  # Track unique speakers across ALL meetings
     total_duration = 0.0
     meetings_per_day = defaultdict(int)
 
     if not STORAGE_DIR.exists():
         return {
             "total_meetings": 0,
+            "unique_speakers": 0,
             "total_speakers": 0,
             "total_duration_seconds": 0,
             "total_duration_formatted": "0:00",
@@ -50,13 +51,23 @@ async def get_dashboard_stats():
 
             segments = transcript.get("segments", [])
 
-            # Speakers — count unique per meeting, then sum
-            meeting_speakers = set()
+            # Load speaker map to resolve generic labels to real names
+            speaker_map = {}
+            smap_path = meeting_dir / "speaker_map.json"
+            if smap_path.exists():
+                try:
+                    with open(smap_path, "r", encoding="utf-8") as f:
+                        speaker_map = json.load(f)
+                except Exception:
+                    pass
+
+            # Speakers — collect unique RESOLVED names across ALL meetings
             for seg in segments:
                 spk = seg.get("speaker", "UNKNOWN")
-                if spk != "UNKNOWN":
-                    meeting_speakers.add(spk)
-            total_speakers += len(meeting_speakers)
+                if spk and spk != "UNKNOWN":
+                    # Apply speaker map: SPEAKER_00 → "Babuji Abraham"
+                    resolved = speaker_map.get(spk, spk)
+                    all_speakers.add(resolved)
 
             # Duration
             if segments:
@@ -93,7 +104,7 @@ async def get_dashboard_stats():
 
     return {
         "total_meetings": total_meetings,
-        "total_speakers": total_speakers,
+        "total_speakers": len(all_speakers),
         "total_duration_seconds": round(total_duration, 1),
         "total_duration_formatted": formatted,
         "meetings_per_day": per_day_list,

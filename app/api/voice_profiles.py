@@ -147,3 +147,82 @@ async def save_profiles_from_map(meeting_id: str):
         "total_speakers": len(speaker_map),
         "message": f"Saved {saved} speaker profile(s)",
     }
+
+
+@router.post("/meeting/{meeting_id}/voice-match")
+async def voice_match_meeting(meeting_id: str):
+    """
+    Re-run voice matching on an already-transcribed meeting.
+    Extracts speaker clips (if missing), compares against stored profiles,
+    and updates transcript + speaker_map with any matches found.
+    """
+    service = _get_voice_service()
+
+    # Ensure speaker clips exist
+    clips_dir = STORAGE_DIR / meeting_id / "speaker_clips"
+    if not clips_dir.exists() or not list(clips_dir.glob("*.wav")):
+        try:
+            service.extract_speaker_clips(meeting_id)
+            logger.info("[%s] Extracted speaker clips for voice matching", meeting_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to extract speaker clips: {e}")
+
+    # Run matching
+    matches = service.match_speakers(meeting_id)
+
+    if not matches:
+        return {
+            "meeting_id": meeting_id,
+            "matched": 0,
+            "matches": {},
+            "message": "No speakers matched against stored profiles",
+        }
+
+    # Update transcript with matched names
+    transcript_path = STORAGE_DIR / meeting_id / "transcript.json"
+    if transcript_path.exists():
+        try:
+            with open(transcript_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            for seg in data.get("segments", []):
+                spk = seg.get("speaker", "")
+                if spk in matches:
+                    seg["speaker"] = matches[spk]
+
+            # Rebuild speaker grouping
+            speakers = {}
+            for seg in data.get("segments", []):
+                spk = seg.get("speaker", "UNKNOWN")
+                if spk not in speakers:
+                    speakers[spk] = []
+                speakers[spk].append({
+                    "start": seg.get("start", 0.0),
+                    "end": seg.get("end", 0.0),
+                    "text": seg.get("text", ""),
+                })
+            data["speakers"] = speakers
+
+            with open(transcript_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+
+            logger.info("[%s] Transcript updated with voice matches: %s", meeting_id, matches)
+        except Exception as e:
+            logger.warning("[%s] Failed to update transcript: %s", meeting_id, e)
+
+    # Save/update speaker_map.json
+    map_path = STORAGE_DIR / meeting_id / "speaker_map.json"
+    existing_map = {}
+    if map_path.exists():
+        with open(map_path, "r", encoding="utf-8") as f:
+            existing_map = json.load(f)
+    existing_map.update(matches)
+    with open(map_path, "w", encoding="utf-8") as f:
+        json.dump(existing_map, f, indent=2, ensure_ascii=False)
+
+    return {
+        "meeting_id": meeting_id,
+        "matched": len(matches),
+        "matches": matches,
+        "message": f"Matched {len(matches)} speaker(s) via voice identification",
+    }

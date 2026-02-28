@@ -17,6 +17,8 @@
         CheckCircle2,
         Zap,
         Trash2,
+        Edit3,
+        Check,
     } from "lucide-svelte";
     import { api, get, post } from "../lib/api.js";
     import { formatTime, shortId } from "../lib/utils.js";
@@ -33,6 +35,10 @@
     let fileInput;
     let searchQuery = "";
     let numSpeakers = "";
+
+    // Inline title editing
+    let editingMeetingId = null;
+    let editingTitle = "";
 
     // Culture Score
     let cultureScore = null;
@@ -243,6 +249,50 @@
             await Promise.all([loadMeetings(), loadStats()]);
         } catch (err) {
             toasts.error("Delete failed: " + err.message);
+        }
+    }
+
+    function startEditTitle(e, meeting) {
+        e.stopPropagation();
+        editingMeetingId = meeting.id;
+        editingTitle = meeting.title;
+    }
+
+    function cancelEditTitle() {
+        editingMeetingId = null;
+        editingTitle = "";
+    }
+
+    async function saveMeetingTitle(e) {
+        if (e) e.stopPropagation();
+        const newTitle = editingTitle.trim();
+        if (!newTitle) {
+            cancelEditTitle();
+            return;
+        }
+        try {
+            await fetch(`${api.base}/meeting/${editingMeetingId}/metadata`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: newTitle, auto_title: newTitle }),
+            });
+            // Update locally without full reload
+            const m = meetings.find((m) => m.id === editingMeetingId);
+            if (m) m.title = newTitle;
+            meetings = meetings; // trigger reactivity
+            toasts.success("Title updated");
+        } catch (err) {
+            toasts.error("Title update failed: " + err.message);
+        }
+        cancelEditTitle();
+    }
+
+    function handleTitleKeydown(e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            saveMeetingTitle(e);
+        } else if (e.key === "Escape") {
+            cancelEditTitle();
         }
     }
 
@@ -615,6 +665,7 @@
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th>ID</th>
                             <th>Meeting</th><th>Speakers</th><th>Duration</th
                             ><th>Status</th><th></th>
                         </tr>
@@ -697,6 +748,7 @@
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th>ID</th>
                             <th>Meeting</th>
                             <th>Speakers</th>
                             <th>Duration</th>
@@ -709,15 +761,49 @@
                             {@const badge = statusBadge(meeting.status)}
                             <tr on:click={() => openMeeting(meeting.id)}>
                                 <td>
-                                    <div
-                                        class="font-semibold text-sm text-gray-900"
+                                    <span
+                                        class="inline-flex items-center justify-center text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 uppercase tracking-wide"
                                     >
-                                        {meeting.title}
-                                    </div>
+                                        {meeting.display_id ||
+                                            shortId(meeting.id)}
+                                    </span>
+                                </td>
+                                <td>
+                                    {#if editingMeetingId === meeting.id}
+                                        <!-- svelte-ignore a11y-autofocus -->
+                                        <input
+                                            type="text"
+                                            class="w-full text-sm font-semibold text-gray-900 bg-white border border-brand-400 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+                                            bind:value={editingTitle}
+                                            on:keydown={handleTitleKeydown}
+                                            on:click|stopPropagation
+                                            autofocus
+                                        />
+                                    {:else}
+                                        <div
+                                            class="flex items-center gap-1.5 group/title"
+                                        >
+                                            <div
+                                                class="font-semibold text-sm text-gray-900"
+                                            >
+                                                {meeting.title}
+                                            </div>
+                                            <button
+                                                class="w-5 h-5 rounded flex items-center justify-center text-gray-300 opacity-0 group-hover/title:opacity-100 hover:text-brand-600 hover:bg-brand-50 transition-all"
+                                                title="Edit title"
+                                                on:click={(e) =>
+                                                    startEditTitle(e, meeting)}
+                                            >
+                                                <Edit3 size={12} />
+                                            </button>
+                                        </div>
+                                    {/if}
                                     <div
                                         class="text-[11px] text-gray-400 mt-0.5"
                                     >
-                                        {meeting.date || shortId(meeting.id)}
+                                        {meeting.date ||
+                                            meeting.display_id ||
+                                            shortId(meeting.id)}
                                     </div>
                                 </td>
                                 <td class="text-sm text-gray-500"
@@ -733,22 +819,39 @@
                                     <div
                                         class="flex items-center justify-end gap-1.5"
                                     >
-                                        <button
-                                            class="w-7 h-7 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                            title="Delete meeting"
-                                            on:click={(e) =>
-                                                deleteMeeting(
-                                                    e,
-                                                    meeting.id,
-                                                    meeting.title,
-                                                )}
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                        <ArrowUpRight
-                                            size={14}
-                                            class="text-gray-300"
-                                        />
+                                        {#if editingMeetingId === meeting.id}
+                                            <button
+                                                class="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                                title="Save title"
+                                                on:click={saveMeetingTitle}
+                                            >
+                                                <Check size={14} />
+                                            </button>
+                                            <button
+                                                class="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                                                title="Cancel"
+                                                on:click|stopPropagation={cancelEditTitle}
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        {:else}
+                                            <button
+                                                class="w-7 h-7 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                                title="Delete meeting"
+                                                on:click={(e) =>
+                                                    deleteMeeting(
+                                                        e,
+                                                        meeting.id,
+                                                        meeting.title,
+                                                    )}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                            <ArrowUpRight
+                                                size={14}
+                                                class="text-gray-300"
+                                            />
+                                        {/if}
                                     </div>
                                 </td>
                             </tr>

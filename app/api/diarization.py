@@ -27,6 +27,40 @@ router = APIRouter()
 STORAGE_DIR = Path("storage")
 
 
+# ── Meeting counter helper ──
+
+MEETING_COUNTER_FILE = STORAGE_DIR / "_meeting_counter.json"
+
+
+def _load_meeting_counter() -> dict:
+    """Load meeting_id → sequential number mapping."""
+    if MEETING_COUNTER_FILE.exists():
+        try:
+            with open(MEETING_COUNTER_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_meeting_counter(counter: dict):
+    """Persist meeting_id → sequential number mapping."""
+    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(MEETING_COUNTER_FILE, "w", encoding="utf-8") as f:
+        json.dump(counter, f, indent=2)
+
+
+def _get_display_id(meeting_id: str, counter: dict) -> str:
+    """Get or assign a display ID like 'm1', 'm2', etc. Never reuses numbers."""
+    if meeting_id not in counter:
+        existing_numbers = list(counter.values()) if counter else []
+        next_number = max(existing_numbers) + 1 if existing_numbers else 1
+        counter[meeting_id] = next_number
+        _save_meeting_counter(counter)
+        logger.info("[%s] Assigned display ID: m%d", meeting_id, next_number)
+    return f"m{counter[meeting_id]}"
+
+
 # ── List all meetings ──
 
 
@@ -34,13 +68,17 @@ STORAGE_DIR = Path("storage")
 async def list_meetings():
     """
     List all meetings in storage with metadata summary.
-    Returns a list of meetings for the Dashboard.
+    Returns a list of meetings for the Dashboard, sorted by date (oldest first).
     """
     meetings = []
     if not STORAGE_DIR.exists():
         return {"meetings": []}
 
-    for d in sorted(STORAGE_DIR.iterdir(), reverse=True):
+    # Load meeting counter for display IDs
+    counter = _load_meeting_counter()
+    counter_modified = False
+
+    for d in STORAGE_DIR.iterdir():
         # Skip non-meeting directories (system folders)
         SKIP_DIRS = {"chroma_db", "speaker_profiles", "models", "__pycache__"}
         if not d.is_dir() or d.name in SKIP_DIRS or d.name.startswith("_"):
@@ -48,7 +86,7 @@ async def list_meetings():
 
         meeting_id = d.name
         meta = {}
-        title = f"Meeting {meeting_id[:8]}..."
+        processed_at = ""
         date = ""
         day = ""
         speakers_count = 0
@@ -56,15 +94,29 @@ async def list_meetings():
         duration = 0
         status = "uploaded"
 
+        # Get or assign display ID (e.g. "m1", "m2")
+        if meeting_id not in counter:
+            counter_modified = True
+        display_id = _get_display_id(meeting_id, counter)
+
+        # Default title uses display ID
+        title = f"Meeting {display_id.upper()}"
+
         # Load metadata
         meta_path = d / "metadata.json"
         if meta_path.exists():
             try:
                 with open(meta_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-                title = meta.get("auto_title", meta.get("title", title))
+                auto_title = meta.get("auto_title", "")
+                manual_title = meta.get("title", "")
+                if auto_title:
+                    title = auto_title
+                elif manual_title:
+                    title = manual_title
                 date = meta.get("processed_date", "")
                 day = meta.get("processed_day", "")
+                processed_at = meta.get("processed_at", "")
             except Exception:
                 pass
 
@@ -91,14 +143,20 @@ async def list_meetings():
 
         meetings.append({
             "id": meeting_id,
+            "display_id": display_id,
             "title": title,
             "date": date,
             "day": day,
+            "processed_at": processed_at,
             "speakers": speakers_count,
             "segments": segments_count,
             "duration": duration,
             "status": status,
         })
+
+    # Sort by processed_at date: oldest first, latest at bottom
+    # Meetings without a date go to the top
+    meetings.sort(key=lambda m: m.get("processed_at") or "")
 
     return {"meetings": meetings}
 
@@ -251,7 +309,11 @@ async def update_metadata(meeting_id: str, body: MeetingMetadataRequest):
 
     logger.info("[%s] Metadata updated: %s", meeting_id, list(update_data.keys()))
 
-    return MeetingMetadataResponse(meeting_id=meeting_id, **meta)
+    # Filter to only fields in the response model, exclude meeting_id (passed separately)
+    valid_fields = MeetingMetadataResponse.model_fields.keys()
+    filtered = {k: v for k, v in meta.items() if k in valid_fields and k != "meeting_id"}
+
+    return MeetingMetadataResponse(meeting_id=meeting_id, **filtered)
 
 
 # ------------------------------------------------------------------
@@ -322,7 +384,8 @@ async def get_meeting_video(meeting_id: str, request: Request):
 @router.delete("/meeting/{meeting_id}")
 async def delete_meeting(meeting_id: str):
     """
-    Permanently delete a meeting: storage dir, audio, video, and ChromaDB index.
+    Permanently delete a meeting: storage dir, audio, video, ChromaDB index,
+    and file hash registry entry (so re-uploading generates a new ID).
     """
     import shutil
 
@@ -353,6 +416,24 @@ async def delete_meeting(meeting_id: str):
         audio_path.unlink()
         deleted.append("audio")
         logger.info("[%s] Audio file removed", meeting_id)
+
+    # 4. Remove from file hash registry (so re-uploading gets a new ID)
+    hash_registry_path = STORAGE_DIR / "_file_hashes.json"
+    if hash_registry_path.exists():
+        try:
+            with open(hash_registry_path, "r", encoding="utf-8") as f:
+                hashes = json.load(f)
+            # Find and remove any hash entries pointing to this meeting_id
+            hashes_to_remove = [h for h, mid in hashes.items() if mid == meeting_id]
+            if hashes_to_remove:
+                for h in hashes_to_remove:
+                    del hashes[h]
+                with open(hash_registry_path, "w", encoding="utf-8") as f:
+                    json.dump(hashes, f, indent=2)
+                deleted.append("hash_registry")
+                logger.info("[%s] Removed %d hash(es) from file registry", meeting_id, len(hashes_to_remove))
+        except Exception as e:
+            logger.warning("[%s] Hash registry cleanup failed: %s", meeting_id, e)
 
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Meeting {meeting_id} not found")

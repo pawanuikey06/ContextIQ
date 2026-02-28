@@ -69,6 +69,7 @@ class SegmentEditRequest(BaseModel):
 class MeetingMetadataRequest(BaseModel):
     """Request to update meeting metadata."""
     title: Optional[str] = None
+    auto_title: Optional[str] = None
     date: Optional[str] = None
     participants: Optional[List[str]] = None
     notes: Optional[str] = None

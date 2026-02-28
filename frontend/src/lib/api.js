@@ -29,6 +29,8 @@ export const api = {
   publish: (id) => `${API_BASE}/publish/${id}`,
   publishPdf: (id) => `${API_BASE}/publish/${id}/pdf`,
   fullReport: (id) => `${API_BASE}/publish/${id}/full-report`,
+  fullReportGenerate: (id) => `${API_BASE}/publish/${id}/full-report`,
+  fullReportEmail: (id) => `${API_BASE}/publish/${id}/full-report/email`,
   chat: {
     ask: `${API_BASE}/chat/ask/stream`,
     meetings: `${API_BASE}/chat/meetings`,

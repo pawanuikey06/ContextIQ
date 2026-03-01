@@ -2,7 +2,7 @@
 Speech-to-Text service — multi-engine transcription.
 
 Modes (set via STT_MODE env var):
-  - "assemblyai" : AssemblyAI API (transcription + diarization in one call) ← recommended
+  - "assemblyai" : AssemblyAI API (transcription + diarization in one call) 
   - "groq"       : Groq Whisper API + local pyannote diarization
   - "local"      : WhisperX + local pyannote diarization
   - "auto"       : Try Groq first, fall back to local

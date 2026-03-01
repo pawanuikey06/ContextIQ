@@ -23,6 +23,8 @@
         UserCheck,
         Share2,
         ExternalLink,
+        Plus,
+        Trash2,
     } from "lucide-svelte";
     import { toasts } from "../lib/toast.js";
     import { api, get, post } from "../lib/api.js";
@@ -118,8 +120,26 @@
     let reportReady = false;
     let reportResult = null;
     let showReportEmailModal = false;
-    let reportEmailInput = "";
+    let reportEmailRecipients = [""];
     let sendingReportEmail = false;
+
+    function openReportEmailModal() {
+        // Auto-populate with speaker display names
+        const names = speakerList.map((s) => displayName(s)).filter((n) => n);
+        reportEmailRecipients = names.length > 0 ? [...names] : [""];
+        showReportEmailModal = true;
+    }
+
+    function addReportRecipient() {
+        reportEmailRecipients = [...reportEmailRecipients, ""];
+    }
+
+    function removeReportRecipient(idx) {
+        reportEmailRecipients = reportEmailRecipients.filter(
+            (_, i) => i !== idx,
+        );
+        if (reportEmailRecipients.length === 0) reportEmailRecipients = [""];
+    }
 
     const tabs = [
         {
@@ -3679,9 +3699,7 @@
                                 <!-- Email Button -->
                                 <button
                                     class="btn-secondary text-sm flex-1 justify-center"
-                                    on:click={() => {
-                                        showReportEmailModal = true;
-                                    }}
+                                    on:click={openReportEmailModal}
                                 >
                                     <Mail size={15} /> Send Email
                                 </button>
@@ -3729,7 +3747,7 @@
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
-                    class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center"
+                    class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                     on:click|self={() => {
                         showReportEmailModal = false;
                     }}
@@ -3737,20 +3755,59 @@
                     <div
                         class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
                     >
-                        <h3 class="text-lg font-bold text-txt-primary">
-                            Send Full Report
-                        </h3>
-                        <p class="text-sm text-txt-faint">
-                            Enter recipient email addresses, separated by
-                            commas.
-                        </p>
-                        <input
-                            type="text"
-                            bind:value={reportEmailInput}
-                            placeholder="email@example.com, another@team.com"
-                            class="w-full border border-surface-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-400"
-                        />
-                        <div class="flex justify-end gap-3">
+                        <div class="flex items-center gap-3">
+                            <div
+                                class="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center"
+                            >
+                                <Mail size={20} class="text-cyan-600" />
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-txt-primary">
+                                    Send Full Report
+                                </h3>
+                                <p class="text-xs text-txt-faint">
+                                    Recipients auto-filled from meeting speakers
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Recipients -->
+                        <div>
+                            <label
+                                class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2"
+                                >Recipients</label
+                            >
+                            {#each reportEmailRecipients as recipient, idx}
+                                <div class="flex items-center gap-2 mb-2">
+                                    <input
+                                        type="email"
+                                        bind:value={reportEmailRecipients[idx]}
+                                        placeholder="name or email@example.com"
+                                        class="flex-1 px-3.5 py-2.5 bg-gray-50 border border-surface-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-400 transition-all"
+                                    />
+                                    {#if reportEmailRecipients.length > 1}
+                                        <button
+                                            on:click={() =>
+                                                removeReportRecipient(idx)}
+                                            class="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                        >
+                                            <Trash2
+                                                size={14}
+                                                class="text-red-400"
+                                            />
+                                        </button>
+                                    {/if}
+                                </div>
+                            {/each}
+                            <button
+                                on:click={addReportRecipient}
+                                class="text-xs font-medium text-cyan-600 hover:text-cyan-700 inline-flex items-center gap-1 mt-1 transition-colors"
+                            >
+                                <Plus size={12} /> Add recipient
+                            </button>
+                        </div>
+
+                        <div class="flex justify-end gap-3 pt-2">
                             <button
                                 class="btn-secondary text-sm"
                                 on:click={() => {
@@ -3762,13 +3819,12 @@
                             <button
                                 class="btn-primary text-sm"
                                 on:click={async () => {
-                                    const recipients = reportEmailInput
-                                        .split(",")
+                                    const recipients = reportEmailRecipients
                                         .map((e) => e.trim())
                                         .filter((e) => e.length > 0);
                                     if (recipients.length === 0) {
                                         toasts.error(
-                                            "Please enter at least one email.",
+                                            "Please enter at least one recipient.",
                                         );
                                         return;
                                     }
@@ -3782,7 +3838,7 @@
                                             `Report sent to ${recipients.join(", ")}`,
                                         );
                                         showReportEmailModal = false;
-                                        reportEmailInput = "";
+                                        reportEmailRecipients = [""];
                                     } catch (err) {
                                         toasts.error(
                                             "Email failed: " + err.message,
